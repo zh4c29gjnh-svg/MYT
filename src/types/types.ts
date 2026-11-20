@@ -87,7 +87,7 @@ export interface HandoverDocument {
   totalAmount: number;
   totalAmountThaiText: string;
   
-  supervisorName: string; // นายปริวิทย์ นวลนาค
+  supervisorName: string; // นายปรวิทย์ นวลนาค
   supervisorCompany: string; // บริษัท ไม้ยืนต้น คอนสตรัคชั่น จำกัด
   supervisorConfirmedDate: string;
   
@@ -101,6 +101,18 @@ export interface HandoverDocument {
 
 export type TaskPriority = 'High' | 'Medium' | 'Low';
 export type TaskStatus = 'pending' | 'in_progress' | 'completed';
+export type MaterialOrderStatus = 'not_ordered' | 'ordered' | 'delivered';
+
+export interface TaskMaterialItem {
+  id: string;
+  name: string; // ชื่อวัสดุ เช่น ปูนซีเมนต์ปอร์ตแลนด์, เหล็กข้ออ้อย DB12
+  spec: string; // รายละเอียด / สเปค / ขนาด
+  quantity: number; // จำนวน
+  unit: string; // หน่วย เช่น ถุง, คิว, เส้น, แผ่น
+  requiredDate?: string; // YYYY-MM-DD วันที่ต้องใช้หน้างาน
+  status: MaterialOrderStatus; // ยังไม่สั่ง / สั่งแล้ว / ถึงหน้างานแล้ว
+  notes?: string; // หมายเหตุ
+}
 
 export interface ProjectTask {
   id: string;
@@ -121,12 +133,14 @@ export interface ProjectTask {
   workflowBadge?: string; // e.g. 'งานเสร็จเรียบร้อย', 'Completed', 'Pending', 'To do', 'ทีมออกแบบ เตรียมแบบ'
   hasSubArrow?: boolean; // e.g. true for Building 2, Building 1
   weightPercent?: number; // Weight in project (0-100)
+  materials?: TaskMaterialItem[]; // รายการถอดวัสดุที่ใช้ในกิจกรรมนี้
 }
 
 export interface ProjectGroup {
   id: string;
   name: string; // เช่น งานงวดที่ 1, งานงวดที่ 2, SomJai Phase 2, SomJai Phase 1
   color?: string;
+  weightPercent?: number; // % น้ำหนักของงวดงานเทียบทั้งโครงการ (0-100, รวมทุกงวด = 100%)
   startDate?: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD
   assignedTo?: string;
@@ -145,7 +159,7 @@ export interface Project {
   endDate: string; // YYYY-MM-DD
   budget: number;
   status: ProjectStatus;
-  supervisorName: string; // เช่น นายปริวิทย์ นวลนาค
+  supervisorName: string; // เช่น นายปรวิทย์ นวลนาค
   clientName?: string; // เช่น CP ALL
   isFollowed?: boolean; // โปรเจคที่ติดตาม vs โปรเจคที่เกี่ยวข้อง
   progress: number; // 0 - 100%
@@ -303,6 +317,59 @@ export interface SevenElevenInspectionDoc {
   fullPagePhotoItems?: SevenElevenInspectionPhoto[];
   createdAt: string;
 }
+
+export interface LandSurveyPin {
+  id: string;
+  pinNumber: number; // 1, 2, 3, 4...
+  label: string; // เช่น หมุดโฉนดที่ 1 (ทิศเหนือ), หลักเขต น.1234
+  lat: number;
+  lng: number;
+  utmZone?: string; // เช่น 47P หรือ 48P
+  utmEasting?: number; // พิกัดฉาก ตะวันออก (E)
+  utmNorthing?: number; // พิกัดฉาก เหนือ (N)
+  accuracyMeters?: number; // ความแม่นยำ GPS (± เมตร)
+  checkedInBy: string; // ชื่อผู้เช็คอินปักหมุด
+  checkedInAt: string; // ISO string หรือ วันเวลาที่เช็คอิน
+  deedDistanceToNextMeters?: number; // ระยะตามใบโฉนดจากหมุดนี้ไปยังหมุดถัดไป (เมตร)
+  photoUrl?: string; // รูปถ่ายหลักหมุด / สภาพหน้างาน ณ จุดเช็คอิน
+  notes?: string;
+}
+
+export interface SiteAttendanceCheckin {
+  id: string;
+  personName: string; // ชื่อช่าง / โฟร์แมน / ผู้รับเหมา
+  role?: string; // ตำแหน่ง / ทีมงาน
+  lat: number;
+  lng: number;
+  accuracyMeters?: number;
+  checkedInAt: string;
+  isInsideBoundary: boolean; // ยืนอยู่ในเขตโฉนดหรือไม่
+  distanceToBoundaryMeters: number; // ระยะห่างจากขอบแปลงที่ดิน (เมตร)
+  photoUrl?: string;
+  notes?: string;
+}
+
+export interface LandSurveyRecord {
+  id: string;
+  docNumber: string; // เช่น SRV-2569-001
+  title: string; // ชื่อแปลงสำรวจ เช่น สำรวจโฉนดที่ดิน 7-11 ลาดกระบัง
+  projectId?: string;
+  projectName?: string;
+  deedNumber: string; // เลขที่โฉนด เช่น 45892
+  parcelNumber?: string; // เลขที่ดิน / หน้าสำรวจ
+  location: string; // ตำบล/อำเภอ/จังหวัด
+  surveyDate: string; // YYYY-MM-DD
+  surveyorName: string; // ผู้สำรวจหลัก
+  deedAreaRai?: number; // เนื้อที่ตามโฉนด (ไร่)
+  deedAreaNgan?: number; // เนื้อที่ตามโฉนด (งาน)
+  deedAreaSqWah?: number; // เนื้อที่ตามโฉนด (ตารางวา)
+  isClosedPolygon: boolean; // ปิดรูปแปลงโฉนด (เชื่อมหมุดสุดท้ายกลับหมุดที่ 1)
+  pins: LandSurveyPin[];
+  attendanceCheckins?: SiteAttendanceCheckin[];
+  notes?: string;
+  createdAt: string;
+}
+
 
 
 

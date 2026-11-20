@@ -17,6 +17,11 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '../../utils/bahtText.ts';
 import { getTaskProgressPercent } from './ProjectKanban.tsx';
+import {
+  DEFAULT_PROJECT_GROUPS,
+  calculateGroupWeightedStats,
+  calculateProjectWeightedStats,
+} from '../../utils/projectWeights.ts';
 
 interface PerformanceChartProps {
   project: Project;
@@ -62,7 +67,7 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({ project }) =
       ? project.groups
       : project.groupsInitialized
       ? []
-      : DEFAULT_GROUPS;
+      : DEFAULT_PROJECT_GROUPS;
 
   const hasTasks = project.tasks.length > 0;
   const totalTasks = hasTasks ? project.tasks.length : 20;
@@ -79,48 +84,38 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({ project }) =
       }).length
     : 0;
 
-  // Overall Actual % from tasks (or fallback to project.progress)
-  const actualPercent = hasTasks
-    ? parseFloat(
-        (
-          project.tasks.reduce((acc, t) => acc + getTaskProgressPercent(t), 0) /
-          project.tasks.length
-        ).toFixed(2)
-      )
-    : parseFloat(project.progress.toFixed(2));
+  const weightedProjectStats = calculateProjectWeightedStats({
+    ...project,
+    groups,
+  });
+
+  // Overall Actual % using weighted phases & tasks (or fallback to equal average/project.progress)
+  const actualPercent = weightedProjectStats.projectProgressPercent;
 
   // Calculate per-group (งวดงาน) statistics
   const activeGroups =
     groups.length > 0
       ? groups
-      : [{ id: 'default', name: 'งวดงานหลัก' }];
+      : [{ id: 'default', name: 'งวดงานหลัก', weightPercent: 100 }];
 
   const groupStats = activeGroups.map((grp, idx) => {
-    const grpTasks = project.tasks.filter((t) => t.groupName === grp.name);
-    const taskCount = grpTasks.length;
-    const avgProgress =
-      taskCount > 0
-        ? grpTasks.reduce((sum, t) => sum + getTaskProgressPercent(t), 0) / taskCount
-        : hasTasks
-        ? 0
-        : actualPercent;
-
-    // Weight of this group in the overall project
-    const weight = hasTasks
-      ? project.tasks.length > 0
-        ? (taskCount / project.tasks.length) * 100
-        : 100 / activeGroups.length
-      : 100 / activeGroups.length;
+    const grpWeighted = calculateGroupWeightedStats(grp, activeGroups, project.tasks);
+    const avgProgress = hasTasks ? grpWeighted.groupProgressPercent : actualPercent;
+    const weight = grpWeighted.groupWeightPercent;
+    const weightedContribution = hasTasks
+      ? grpWeighted.groupEarnedInProject
+      : parseFloat(((avgProgress * weight) / 100).toFixed(2));
 
     return {
       id: grp.id,
       index: idx + 1,
       name: grp.name,
-      taskCount,
-      completedCount: grpTasks.filter((t) => getTaskProgressPercent(t) >= 100).length,
-      avgProgress: parseFloat(avgProgress.toFixed(1)),
-      weight: parseFloat(weight.toFixed(1)),
-      weightedContribution: parseFloat(((avgProgress * weight) / 100).toFixed(2)),
+      taskCount: grpWeighted.taskCount,
+      completedCount: grpWeighted.completedTaskCount,
+      totalTaskWeightInGroup: grpWeighted.totalTaskWeightInGroup,
+      avgProgress: parseFloat(avgProgress.toFixed(2)),
+      weight: parseFloat(weight.toFixed(2)),
+      weightedContribution: parseFloat(weightedContribution.toFixed(2)),
     };
   });
 
@@ -161,32 +156,63 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({ project }) =
       ? allActivityBarItems
       : allActivityBarItems.filter((item) => item.groupName === selectedGroupFilter);
 
-  // Build dynamic S-Curve Milestones from project startDate -> endDate and actual group progress
-  const startDateObj = project.startDate ? new Date(project.startDate) : new Date('2026-08-01');
-  const endDateObj = project.endDate ? new Date(project.endDate) : new Date('2026-11-30');
-  const startMs = isNaN(startDateObj.getTime()) ? Date.now() : startDateObj.getTime();
-  const endMs =
-    isNaN(endDateObj.getTime()) || endDateObj.getTime() <= startMs
-      ? startMs + 90 * 24 * 60 * 60 * 1000
-      : endDateObj.getTime();
+  // Helper to parse YYYY-MM-DD in local time (avoiding UTC midnight shift)
+  const parseLocalDateMs = (dateStr?: string, fallbackMs?: number): number => {
+    if (dateStr) {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        const d = parseInt(parts[2], 10);
+        if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+          return new Date(y, m, d).getTime();
+        }
+      }
+      const parsed = new Date(dateStr).getTime();
+      if (!isNaN(parsed)) return parsed;
+    }
+    return fallbackMs ?? Date.now();
+  };
 
-  // Standard S-Curve logistic cumulative weights for N steps
-  const totalSteps = Math.max(4, activeGroups.length + 1);
-  const sCurveRaw = Array.from({ length: totalSteps + 1 }, (_, i) => {
-    if (i === 0) return 0;
-    if (i === totalSteps) return 100;
-    const t = i / totalSteps;
-    // Smooth S-curve polynomial: 3t^2 - 2t^3 (Hermite S-curve from 0 to 1)
+  const todayDateObj = new Date();
+  const todayLocalMidnight = new Date(
+    todayDateObj.getFullYear(),
+    todayDateObj.getMonth(),
+    todayDateObj.getDate()
+  );
+  const todayMs = todayLocalMidnight.getTime();
+  const todayThaiSlash = `${todayLocalMidnight.getDate()}/${
+    todayLocalMidnight.getMonth() + 1
+  }/${todayLocalMidnight.getFullYear() + 543}`;
+
+  // Build dynamic S-Curve Milestones from project startDate -> endDate
+  const startMs = parseLocalDateMs(project.startDate, todayMs - 30 * 24 * 60 * 60 * 1000);
+  const rawEndMs = parseLocalDateMs(project.endDate, startMs + 90 * 24 * 60 * 60 * 1000);
+  const endMs = rawEndMs <= startMs ? startMs + 90 * 24 * 60 * 60 * 1000 : rawEndMs;
+
+  // Hermite S-curve helper: t in [0, 1] -> planned % in [0, 100]
+  const calcPlannedSPercent = (ratio: number): number => {
+    const t = Math.min(1, Math.max(0, ratio));
     const s = 3 * t * t - 2 * t * t * t;
     return parseFloat((s * 100).toFixed(1));
-  });
+  };
 
-  // Build cumulative actual progress across steps so it is monotonically non-decreasing
-  // and ends at the exact current `actualPercent`
-  const milestones = sCurveRaw.map((plannedVal, stepIdx) => {
+  // Current date position along the project timeline [0, 1]
+  const isBeforeStart = todayMs < startMs;
+  const isAfterEnd = todayMs > endMs;
+  const timeElapsedRatio = Math.min(1, Math.max(0, (todayMs - startMs) / (endMs - startMs)));
+  const plannedAtToday = calcPlannedSPercent(timeElapsedRatio);
+  const variance = parseFloat((actualPercent - plannedAtToday).toFixed(1));
+
+  // Standard S-Curve milestones for Planned line (0% -> 100% across full project)
+  const totalSteps = Math.max(4, activeGroups.length + 1);
+  const milestones = Array.from({ length: totalSteps + 1 }, (_, stepIdx) => {
     const ratio = stepIdx / totalSteps;
-    const stepDate = new Date(startMs + (endMs - startMs) * ratio);
+    const stepMs = startMs + (endMs - startMs) * ratio;
+    const stepDate = new Date(stepMs);
     const dateLabel = formatShortDate(stepDate);
+    const plannedVal =
+      stepIdx === 0 ? 0 : stepIdx === totalSteps ? 100 : calcPlannedSPercent(ratio);
 
     let stepLabel = '';
     if (stepIdx === 0) {
@@ -199,69 +225,30 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({ project }) =
       stepLabel = `ระยะที่ ${stepIdx}`;
     }
 
-    let actualCumulative = 0;
-    if (stepIdx === 0) {
-      actualCumulative = 0;
-    } else if (stepIdx === totalSteps) {
-      actualCumulative = actualPercent;
-    } else if (hasTasks && activeGroups.length > 0) {
-      const groupsUpToHere = groupStats.slice(0, stepIdx);
-      const sumContribution = groupsUpToHere.reduce(
-        (acc, g) => acc + g.weightedContribution,
-        0
-      );
-      const sCurveScaled = (plannedVal / 100) * actualPercent;
-      actualCumulative = parseFloat(
-        Math.min(actualPercent, Math.max(sumContribution, sCurveScaled)).toFixed(1)
-      );
-    } else {
-      actualCumulative = parseFloat(((plannedVal / 100) * actualPercent).toFixed(1));
-    }
-
     return {
       stepIdx,
+      ratio,
+      dateMs: stepMs,
       label: stepLabel,
       dateLabel,
       planned: plannedVal,
-      actual: actualCumulative,
     };
   });
 
-  // Guarantee monotonic non-decreasing values on the actual curve
-  for (let i = 1; i < milestones.length; i++) {
-    if (milestones[i].actual < milestones[i - 1].actual) {
-      milestones[i].actual = milestones[i - 1].actual;
-    }
-  }
-  if (milestones.length > 0) {
-    milestones[milestones.length - 1].actual = actualPercent;
-  }
-
-  // Planned % based on current date within project timeline (or 100% if past endDate)
-  const nowMs = Date.now();
-  const timeElapsedRatio = Math.min(1, Math.max(0, (nowMs - startMs) / (endMs - startMs)));
-  const currentPlannedS =
-    3 * timeElapsedRatio * timeElapsedRatio -
-    2 * timeElapsedRatio * timeElapsedRatio * timeElapsedRatio;
-  const plannedPercent =
-    actualPercent >= 100
-      ? 100
-      : parseFloat(Math.max(actualPercent, currentPlannedS * 100).toFixed(1));
-
-  const variance = parseFloat((actualPercent - plannedPercent).toFixed(1));
-
   // SVG chart dimensions
   const svgWidth = 760;
-  const svgHeight = 310;
+  const svgHeight = 326;
   const padLeft = 52;
-  const padRight = 36;
-  const padTop = 32;
+  const padRight = 40;
+  const padTop = 44;
   const padBottom = 64;
   const graphWidth = svgWidth - padLeft - padRight;
   const graphHeight = svgHeight - padTop - padBottom;
 
+  const getXByRatio = (ratio: number) =>
+    padLeft + Math.min(1, Math.max(0, ratio)) * graphWidth;
   const getX = (index: number) =>
-    padLeft + (index / Math.max(1, milestones.length - 1)) * graphWidth;
+    getXByRatio(index / Math.max(1, milestones.length - 1));
   const getY = (val: number) =>
     padTop + graphHeight - (Math.min(100, Math.max(0, val)) / 100) * graphHeight;
 
@@ -282,17 +269,99 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({ project }) =
     return d;
   };
 
+  // Planned points cover the entire project duration (0% -> 100%)
   const plannedPoints = milestones.map((m, i) => ({ x: getX(i), y: getY(m.planned) }));
-  const actualPoints = milestones.map((m, i) => ({ x: getX(i), y: getY(m.actual) }));
-
   const plannedPath = buildSmoothPath(plannedPoints);
-  const actualPath = buildSmoothPath(actualPoints);
 
+  // Actual cumulative points STOP at Today (like a live trading chart)
+  // Build past checkpoints strictly before todayMs, then terminate at (todayX, actualPercent)
+  const todayX = getXByRatio(timeElapsedRatio);
+  const todayActualY = getY(actualPercent);
+  const todayPlannedY = getY(plannedAtToday);
+
+  interface ActualCurveNode {
+    x: number;
+    y: number;
+    value: number;
+    isTodayTerminal?: boolean;
+  }
+
+  const actualNodes: ActualCurveNode[] = [];
+  if (timeElapsedRatio <= 0.001) {
+    // Today is at or before project start date -> stop at start point
+    actualNodes.push({
+      x: padLeft,
+      y: getY(actualPercent),
+      value: actualPercent,
+      isTodayTerminal: true,
+    });
+  } else {
+    // Start at (startMs, 0%)
+    actualNodes.push({ x: padLeft, y: getY(0), value: 0 });
+
+    // Intermediate milestone nodes strictly before today (with small margin so dots don't overlap today's terminal dot)
+    const pastMilestones = milestones.filter(
+      (m) => m.stepIdx > 0 && m.ratio < timeElapsedRatio - 0.035
+    );
+
+    let prevActual = 0;
+    for (const m of pastMilestones) {
+      // Scale progress smoothly along elapsed ratio up to today's actualPercent
+      const progressAlongElapsed =
+        plannedAtToday > 0
+          ? (m.planned / plannedAtToday) * actualPercent
+          : (m.ratio / timeElapsedRatio) * actualPercent;
+
+      // Blend slightly with real phase cumulative contribution if tasks exist
+      let val = progressAlongElapsed;
+      if (hasTasks && activeGroups.length > 0 && m.stepIdx <= groupStats.length) {
+        const sumContrib = groupStats
+          .slice(0, m.stepIdx)
+          .reduce((acc, g) => acc + g.weightedContribution, 0);
+        val = Math.min(actualPercent, (progressAlongElapsed + sumContrib) / 2);
+      }
+      val = parseFloat(Math.min(actualPercent, Math.max(prevActual, val)).toFixed(1));
+      prevActual = val;
+
+      actualNodes.push({
+        x: getXByRatio(m.ratio),
+        y: getY(val),
+        value: val,
+      });
+    }
+
+    // Terminal live point right at Today's date
+    actualNodes.push({
+      x: todayX,
+      y: todayActualY,
+      value: actualPercent,
+      isTodayTerminal: true,
+    });
+  }
+
+  const actualPath = buildSmoothPath(actualNodes);
   const baselineY = getY(0);
   const actualAreaPath =
-    actualPoints.length > 1
-      ? `${actualPath} L ${actualPoints[actualPoints.length - 1].x} ${baselineY} L ${actualPoints[0].x} ${baselineY} Z`
+    actualNodes.length > 1
+      ? `${actualPath} L ${actualNodes[actualNodes.length - 1].x} ${baselineY} L ${actualNodes[0].x} ${baselineY} Z`
       : '';
+
+  // Smart positioning for Today's live callout badge so it never clips off the SVG edges
+  const placeCalloutLeft = todayX > svgWidth - padRight - 140;
+  const calloutW = 108;
+  const calloutH = 22;
+  const calloutX = placeCalloutLeft ? todayX - calloutW - 10 : todayX + 10;
+  const calloutY = Math.min(
+    baselineY - calloutH - 4,
+    Math.max(padTop + 4, todayActualY - calloutH / 2)
+  );
+
+  // Today top header pill X clamped inside graph bounds
+  const todayPillW = 122;
+  const todayPillX = Math.min(
+    svgWidth - padRight - todayPillW / 2,
+    Math.max(padLeft + todayPillW / 2, todayX)
+  );
 
   return (
     <div className="space-y-6">
@@ -323,10 +392,10 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({ project }) =
         {/* Actual Progress */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium mb-1">
-            <span>ผลงานจริงสะสม (Actual)</span>
+            <span>ผลงานจริงสะสม (ณ {todayThaiSlash})</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-500" />
           </div>
-          <div className="text-2xl font-bold text-emerald-600">{actualPercent}%</div>
+          <div className="text-2xl font-bold text-emerald-600 tabular-nums">{actualPercent}%</div>
           <div className="w-full bg-slate-100 rounded-full h-2 mt-2 overflow-hidden">
             <div
               className="bg-emerald-500 h-full rounded-full transition-all duration-300"
@@ -334,27 +403,42 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({ project }) =
             ></div>
           </div>
           <p className="text-[11px] text-slate-400 mt-1.5">
-            คำนวณจากค่าเฉลี่ย % ของทุกกิจกรรมในโครงการ
+            คำนวณจากน้ำหนักงวดงานและ % ของทุกกิจกรรมในโครงการ
           </p>
         </div>
 
-        {/* Planned Progress */}
+        {/* Planned Progress at Today */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium mb-1">
-            <span>แผนงานเป้าหมาย (Planned)</span>
+            <span>แผนงานคาดการณ์ ณ วันนี้</span>
             <Clock className="w-4 h-4 text-blue-500" />
           </div>
-          <div className="text-2xl font-bold text-blue-600">100%</div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-blue-600 tabular-nums">
+              {plannedAtToday}%
+            </span>
+            <span className="text-xs text-slate-400">/ เป้าหมาย 100%</span>
+          </div>
           <div className="w-full bg-slate-100 rounded-full h-2 mt-2 overflow-hidden">
             <div
               className="bg-blue-500 h-full rounded-full"
-              style={{ width: `${Math.min(100, plannedPercent)}%` }}
+              style={{ width: `${Math.min(100, plannedAtToday)}%` }}
             ></div>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1.5">
-            {variance >= 0
-              ? 'ผลงานจริงเป็นไปตามแผนงาน'
-              : `คงเหลืออีก ${(100 - actualPercent).toFixed(1)}% เพื่อครบ 100%`}
+          <p
+            className={`text-[11px] font-semibold mt-1.5 tabular-nums ${
+              variance > 0
+                ? 'text-emerald-600'
+                : variance < 0
+                ? 'text-rose-600'
+                : 'text-slate-500'
+            }`}
+          >
+            {variance > 0
+              ? `เร็วกว่าแผน +${variance}%`
+              : variance < 0
+              ? `ช้ากว่าแผน ${variance}%`
+              : 'ผลงานจริงตรงตามแผนงาน ณ วันนี้'}
           </p>
         </div>
 
@@ -364,7 +448,7 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({ project }) =
             <span>สถานะกิจกรรมการทำงาน</span>
             <PieChart className="w-4 h-4 text-purple-500" />
           </div>
-          <div className="text-2xl font-bold text-slate-900">
+          <div className="text-2xl font-bold text-slate-900 tabular-nums">
             {completedTasks} / {totalTasks} <span className="text-xs font-normal text-slate-500">เสร็จ 100%</span>
           </div>
           <p className="text-[11px] text-slate-500 mt-1.5">
@@ -379,10 +463,10 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({ project }) =
             <span>งบประมาณโครงการ</span>
             <DollarSign className="w-4 h-4 text-amber-500" />
           </div>
-          <div className="text-2xl font-bold text-slate-900">
+          <div className="text-2xl font-bold text-slate-900 tabular-nums">
             {formatCurrency(project.budget)} บ.
           </div>
-          <p className="text-[11px] text-emerald-600 font-medium mt-1.5">
+          <p className="text-[11px] text-emerald-600 font-medium mt-1.5 tabular-nums">
             มูลค่างานตามผลงานจริง ≈ {formatCurrency((project.budget * actualPercent) / 100)} บ.
           </p>
         </div>
@@ -390,25 +474,34 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({ project }) =
 
       {/* S-Curve Graph Card */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
           <div>
             <h4 className="font-bold text-slate-800 text-base">
               กราฟเส้นแสดงความก้าวหน้าโครงการ (S-Curve)
             </h4>
             <p className="text-xs text-slate-500">
-              เปรียบเทียบเปอร์เซ็นต์แผนงานสะสม (เส้นประสีน้ำเงิน) เทียบกับผลงานจริงสะสมตามงวดงาน (เส้นทึบสีเขียว)
+              เส้นทึบสีเขียว (ผลงานจริงสะสม) หยุดที่วันที่ปัจจุบัน ({todayThaiSlash}) เพื่อเปรียบเทียบกับเส้นแผนงานคาดการณ์ (เส้นประสีน้ำเงิน)
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-4 text-xs font-medium">
+          <div className="flex flex-wrap items-center gap-3 text-xs font-medium">
             <div className="flex items-center space-x-2 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
               <span className="w-4 h-0.5 bg-blue-600 border-t-2 border-dashed border-blue-600"></span>
-              <span className="text-blue-800">แผนงานสะสม (Planned 0% → 100%)</span>
+              <span className="text-blue-800">
+                แผนงานสะสม (ณ วันนี้ {plannedAtToday}%)
+              </span>
             </div>
             <div className="flex items-center space-x-2 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
               <span className="w-4 h-1 bg-emerald-500 rounded-full"></span>
               <span className="text-emerald-900 font-bold">
-                ผลงานจริงสะสม (Actual ปัจจุบัน {actualPercent}%)
+                ผลงานจริงสะสม ({actualPercent}% ณ {todayThaiSlash})
+              </span>
+            </div>
+            <div className="flex items-center space-x-1.5 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200 text-amber-800 font-semibold">
+              <span className="w-0.5 h-3.5 bg-amber-500"></span>
+              <span>
+                วันนี้ {todayThaiSlash}
+                {isBeforeStart ? ' (ก่อนเริ่มงาน)' : isAfterEnd ? ' (เลยกำหนดส่ง)' : ''}
               </span>
             </div>
           </div>
@@ -423,10 +516,22 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({ project }) =
             >
               <defs>
                 <linearGradient id="actualAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.24" />
+                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.26" />
                   <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
                 </linearGradient>
               </defs>
+
+              {/* Future/Forecast Region subtle tint to the right of Today (like a trading chart) */}
+              {timeElapsedRatio < 1 && (
+                <rect
+                  x={todayX}
+                  y={padTop}
+                  width={Math.max(0, svgWidth - padRight - todayX)}
+                  height={graphHeight}
+                  fill="#f8fafc"
+                  opacity="0.7"
+                />
+              )}
 
               {/* Horizontal Grid lines (0%, 25%, 50%, 75%, 100%) */}
               {[0, 25, 50, 75, 100].map((val) => (
@@ -488,10 +593,43 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({ project }) =
                 </g>
               ))}
 
-              {/* Shaded Area under Actual Curve */}
+              {/* Vertical "Today" Cutoff Line (Trading-style Data Date cursor) */}
+              <g>
+                <line
+                  x1={todayX}
+                  y1={padTop - 8}
+                  x2={todayX}
+                  y2={baselineY}
+                  stroke="#f59e0b"
+                  strokeWidth="1.75"
+                  strokeDasharray="4 3"
+                />
+                <rect
+                  x={todayPillX - todayPillW / 2}
+                  y={padTop - 30}
+                  width={todayPillW}
+                  height="20"
+                  rx="6"
+                  fill="#fffbeb"
+                  stroke="#f59e0b"
+                  strokeWidth="1.2"
+                />
+                <text
+                  x={todayPillX}
+                  y={padTop - 16.5}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fontWeight="700"
+                  fill="#b45309"
+                >
+                  วันนี้ {todayThaiSlash}
+                </text>
+              </g>
+
+              {/* Shaded Area under Actual Curve (Stops strictly at Today) */}
               {actualAreaPath && <path d={actualAreaPath} fill="url(#actualAreaGrad)" />}
 
-              {/* Planned S-Curve Line (Dashed Blue) */}
+              {/* Planned S-Curve Line (Dashed Blue across entire project) */}
               <path
                 d={plannedPath}
                 fill="none"
@@ -500,37 +638,49 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({ project }) =
                 strokeDasharray="6 4"
               />
 
-              {/* Actual S-Curve Line (Solid Emerald) */}
-              <path
-                d={actualPath}
-                fill="none"
+              {/* Horizontal live-level guide line from Today's actual value to Y-axis (like trading price line) */}
+              <line
+                x1={padLeft}
+                y1={todayActualY}
+                x2={todayX}
+                y2={todayActualY}
                 stroke="#10b981"
-                strokeWidth="3.5"
-                strokeLinecap="round"
+                strokeWidth="1"
+                strokeDasharray="3 3"
+                opacity="0.7"
               />
 
-              {/* Milestone Dots & Percentage Labels */}
+              {/* Actual S-Curve Line (Solid Emerald — stops strictly at Today) */}
+              {actualNodes.length > 1 && (
+                <path
+                  d={actualPath}
+                  fill="none"
+                  stroke="#10b981"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                />
+              )}
+
+              {/* Planned Milestone Dots & Labels (Full timeline) */}
               {milestones.map((m, i) => {
                 const cx = getX(i);
                 const cyPlanned = getY(m.planned);
-                const cyActual = getY(m.actual);
-                const isClose = Math.abs(cyPlanned - cyActual) < 16;
+                const nearTodayX = Math.abs(cx - todayX) < 34;
 
                 return (
-                  <g key={`dots-${i}`}>
-                    {/* Planned dot & label */}
+                  <g key={`planned-dot-${i}`}>
                     <circle
                       cx={cx}
                       cy={cyPlanned}
-                      r="4"
+                      r="3.8"
                       fill="#3b82f6"
                       stroke="#ffffff"
                       strokeWidth="1.5"
                     />
-                    {i > 0 && (
+                    {i > 0 && !nearTodayX && (
                       <text
                         x={cx}
-                        y={isClose ? cyPlanned - 12 : cyPlanned - 8}
+                        y={cyPlanned - 9}
                         textAnchor="middle"
                         fontSize="9.5"
                         fontWeight="600"
@@ -539,39 +689,106 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({ project }) =
                         {m.planned}%
                       </text>
                     )}
-
-                    {/* Actual dot & label */}
-                    <circle
-                      cx={cx}
-                      cy={cyActual}
-                      r="5"
-                      fill="#10b981"
-                      stroke="#ffffff"
-                      strokeWidth="2"
-                    />
-                    <rect
-                      x={cx - 20}
-                      y={isClose ? cyActual + 7 : cyActual - 22}
-                      width="40"
-                      height="15"
-                      rx="4"
-                      fill="#ecfdf5"
-                      stroke="#a7f3d0"
-                      strokeWidth="1"
-                    />
-                    <text
-                      x={cx}
-                      y={isClose ? cyActual + 18 : cyActual - 11}
-                      textAnchor="middle"
-                      fontSize="9.5"
-                      fontWeight="700"
-                      fill="#047857"
-                    >
-                      {m.actual}%
-                    </text>
                   </g>
                 );
               })}
+
+              {/* Planned Value Marker right at Today's vertical line */}
+              <g>
+                <circle
+                  cx={todayX}
+                  cy={todayPlannedY}
+                  r="4.5"
+                  fill="#2563eb"
+                  stroke="#ffffff"
+                  strokeWidth="2"
+                />
+                <text
+                  x={placeCalloutLeft ? todayX - 10 : todayX + 10}
+                  y={
+                    Math.abs(todayPlannedY - todayActualY) < 22
+                      ? todayPlannedY <= todayActualY
+                        ? todayPlannedY - 12
+                        : todayPlannedY + 18
+                      : todayPlannedY - 8
+                  }
+                  textAnchor={placeCalloutLeft ? 'end' : 'start'}
+                  fontSize="9.5"
+                  fontWeight="700"
+                  fill="#1d4ed8"
+                >
+                  แผนวันนี้ {plannedAtToday}%
+                </text>
+              </g>
+
+              {/* Past Actual Nodes (only up to Today) */}
+              {actualNodes.map((node, idx) => {
+                if (node.isTodayTerminal) return null;
+                return (
+                  <g key={`actual-node-${idx}`}>
+                    <circle
+                      cx={node.x}
+                      cy={node.y}
+                      r="4"
+                      fill="#10b981"
+                      stroke="#ffffff"
+                      strokeWidth="1.75"
+                    />
+                    {idx > 0 && (
+                      <text
+                        x={node.x}
+                        y={node.y + 15}
+                        textAnchor="middle"
+                        fontSize="9"
+                        fontWeight="700"
+                        fill="#047857"
+                      >
+                        {node.value}%
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+
+              {/* Live Terminal Endpoint at Today (Trading-style marker + callout tag) */}
+              <g>
+                {/* Soft outer halo */}
+                <circle
+                  cx={todayX}
+                  cy={todayActualY}
+                  r="10"
+                  fill="#10b981"
+                  opacity="0.22"
+                />
+                {/* Crisp endpoint dot */}
+                <circle
+                  cx={todayX}
+                  cy={todayActualY}
+                  r="5.5"
+                  fill="#059669"
+                  stroke="#ffffff"
+                  strokeWidth="2.2"
+                />
+                {/* Live value callout tag */}
+                <rect
+                  x={calloutX}
+                  y={calloutY}
+                  width={calloutW}
+                  height={calloutH}
+                  rx="6"
+                  fill="#059669"
+                />
+                <text
+                  x={calloutX + calloutW / 2}
+                  y={calloutY + 14.5}
+                  textAnchor="middle"
+                  fontSize="10.5"
+                  fontWeight="700"
+                  fill="#ffffff"
+                >
+                  ทำจริง {actualPercent}%
+                </text>
+              </g>
             </svg>
           </div>
         </div>
@@ -1001,7 +1218,9 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({ project }) =
                 <span>
                   เสร็จ 100%: {g.completedCount}/{g.taskCount} ทาสก์
                 </span>
-                <span>สัดส่วนงาน {g.weight}%</span>
+                <span>
+                  น้ำหนักงวด {g.weight}% (ได้ {g.weightedContribution}%)
+                </span>
               </div>
             </div>
           ))}

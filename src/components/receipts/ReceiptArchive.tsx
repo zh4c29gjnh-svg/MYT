@@ -13,12 +13,14 @@ import {
   FileText,
   ClipboardCheck,
   Eye,
+  Edit2,
   Trash2,
   Table,
   CheckCircle2,
   Loader2,
   ExternalLink,
   Download,
+  UserCheck,
 } from 'lucide-react';
 import { ReceiptDocument } from './ReceiptDocument.tsx';
 import { HandoverDocument } from './HandoverDocument.tsx';
@@ -37,6 +39,8 @@ interface ReceiptArchiveProps {
   onDeleteReceipt: (id: string) => void;
   onDeleteHandover: (id: string) => void;
   onEditReceipt?: (receipt: Receipt) => void;
+  onEditHandover?: (handover: HandoverDocType) => void;
+  onEditSubcontractor?: (subcontractor: Subcontractor) => void;
 }
 
 export const ReceiptArchive: React.FC<ReceiptArchiveProps> = ({
@@ -46,9 +50,12 @@ export const ReceiptArchive: React.FC<ReceiptArchiveProps> = ({
   projects,
   onDeleteReceipt,
   onDeleteHandover,
+  onEditReceipt,
+  onEditHandover,
+  onEditSubcontractor,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'receipt' | 'handover'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'receipt' | 'handover' | 'subcontractor'>('all');
   const [selectedSubFilter, setSelectedSubFilter] = useState<string>('all');
   
   const [viewingReceipt, setViewingReceipt] = useState<Receipt | null>(null);
@@ -393,6 +400,14 @@ export const ReceiptArchive: React.FC<ReceiptArchiveProps> = ({
             >
               ใบส่งมอบงาน ({handoverItems.length})
             </button>
+            <button
+              onClick={() => setTypeFilter('subcontractor')}
+              className={`px-3 py-1.5 rounded-lg transition-colors ${
+                typeFilter === 'subcontractor' ? 'bg-white shadow-xs text-slate-900 font-semibold' : 'text-slate-600'
+              }`}
+            >
+              ข้อมูล ผรม. ({subcontractors.length})
+            </button>
           </div>
 
           <select
@@ -410,101 +425,219 @@ export const ReceiptArchive: React.FC<ReceiptArchiveProps> = ({
         </div>
       </div>
 
-      {/* Documents Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs sm:text-sm">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-                <th className="p-3.5 pl-5">ประเภท</th>
-                <th className="p-3.5">เลขที่เอกสาร</th>
-                <th className="p-3.5">วันที่</th>
-                <th className="p-3.5">ผู้รับเหมา / ผู้รับเงิน</th>
-                <th className="p-3.5">รายการชำระ / โครงการ</th>
-                <th className="p-3.5 text-right">ยอดสุทธิ (บาท)</th>
-                <th className="p-3.5 text-center pr-5">การดำเนินการ</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filtered.map((item) => {
-                const thaiDate = formatThaiDate(item.date).fullText;
-                return (
-                  <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="p-3.5 pl-5">
-                      <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${item.tagColor}`}>
-                        {item.tag}
-                      </span>
-                    </td>
-                    <td className="p-3.5 font-mono font-bold text-slate-900">{item.docNumber}</td>
-                    <td className="p-3.5 text-slate-600">{thaiDate}</td>
-                    <td className="p-3.5 font-medium text-slate-900">{item.subcontractorName}</td>
-                    <td className="p-3.5 text-slate-600 max-w-xs truncate" title={item.title}>
-                      {item.title}
-                    </td>
-                    <td className="p-3.5 text-right font-bold text-slate-900">
-                      {formatCurrency(item.amount)}
-                    </td>
-                    <td className="p-3.5 pr-5 text-center">
-                      <div className="inline-flex items-center space-x-1">
-                        <button
-                          onClick={() => {
-                            if (item.type === 'receipt') {
-                              setViewingReceipt(item.raw as Receipt);
-                            } else {
-                              setViewingHandover(item.raw as HandoverDocType);
-                            }
-                          }}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="ดูตัวอย่างเอกสาร A4 / พิมพ์ / ดาวน์โหลด"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setItemToDelete({
-                              id: item.id,
-                              type: item.type,
-                              name: `${item.type === 'receipt' ? 'ใบเสร็จรับเงิน' : 'หนังสือส่งมอบงาน'} ${item.docNumber} (${item.subcontractorName})`,
-                            });
-                          }}
-                          className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-                          title="ลบเอกสาร"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {filtered.length === 0 && (
-          <div className="text-center py-12 text-slate-400">
-            <p>ไม่พบเอกสารตามเงื่อนไขที่ค้นหา</p>
+      {/* Subcontractor Directory Table when typeFilter === 'subcontractor' */}
+      {typeFilter === 'subcontractor' ? (
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs sm:text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                  <th className="p-3.5 pl-5">ชื่อผู้รับเหมา (ผรม.)</th>
+                  <th className="p-3.5">ประเภทงาน / ความชำนาญ</th>
+                  <th className="p-3.5">เลขบัตรประชาชน</th>
+                  <th className="p-3.5">เบอร์โทรศัพท์</th>
+                  <th className="p-3.5">ที่อยู่</th>
+                  <th className="p-3.5 text-center pr-5">การดำเนินการ</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {subcontractors
+                  .filter((sub) => {
+                    if (selectedSubFilter !== 'all' && sub.name !== selectedSubFilter) {
+                      return false;
+                    }
+                    if (searchTerm) {
+                      const q = searchTerm.toLowerCase();
+                      return (
+                        sub.name.toLowerCase().includes(q) ||
+                        sub.skillType.toLowerCase().includes(q) ||
+                        sub.idCardNumber.toLowerCase().includes(q)
+                      );
+                    }
+                    return true;
+                  })
+                  .map((sub) => (
+                    <tr key={sub.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="p-3.5 pl-5 font-bold text-slate-900">{sub.name}</td>
+                      <td className="p-3.5 text-slate-700">{sub.skillType}</td>
+                      <td className="p-3.5 font-mono text-slate-700">{sub.idCardNumber || '-'}</td>
+                      <td className="p-3.5 text-slate-600">{sub.phone || '-'}</td>
+                      <td className="p-3.5 text-slate-600 max-w-xs truncate" title={sub.address}>
+                        {sub.address || '-'}
+                      </td>
+                      <td className="p-3.5 pr-5 text-center">
+                        {onEditSubcontractor && (
+                          <button
+                            type="button"
+                            onClick={() => onEditSubcontractor(sub)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                            title="เรียกข้อมูล ผรม. ไปแก้ไขที่หน้า 1.1"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>เรียกไปแก้ไข (1.1)</span>
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        /* Documents Table */
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs sm:text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                  <th className="p-3.5 pl-5">ประเภท</th>
+                  <th className="p-3.5">เลขที่เอกสาร</th>
+                  <th className="p-3.5">วันที่</th>
+                  <th className="p-3.5">ผู้รับเหมา / ผู้รับเงิน</th>
+                  <th className="p-3.5">รายการชำระ / โครงการ</th>
+                  <th className="p-3.5 text-right">ยอดสุทธิ (บาท)</th>
+                  <th className="p-3.5 text-center pr-5">การดำเนินการ</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filtered.map((item) => {
+                  const thaiDate = formatThaiDate(item.date).fullText;
+                  const matchedSub = subcontractors.find(
+                    (s) =>
+                      s.id === (item.raw as any).subcontractorId ||
+                      s.name === item.subcontractorName
+                  );
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="p-3.5 pl-5">
+                        <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${item.tagColor}`}>
+                          {item.tag}
+                        </span>
+                      </td>
+                      <td className="p-3.5 font-mono font-bold text-slate-900">{item.docNumber}</td>
+                      <td className="p-3.5 text-slate-600">{thaiDate}</td>
+                      <td className="p-3.5 font-medium text-slate-900">
+                        <div className="flex items-center gap-1.5">
+                          <span>{item.subcontractorName}</span>
+                          {matchedSub && onEditSubcontractor && (
+                            <button
+                              type="button"
+                              onClick={() => onEditSubcontractor(matchedSub)}
+                              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                              title={`แก้ไขข้อมูล ผรม. (${matchedSub.name}) ในหน้า 1.1`}
+                            >
+                              <UserCheck className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-3.5 text-slate-600 max-w-xs truncate" title={item.title}>
+                        {item.title}
+                      </td>
+                      <td className="p-3.5 text-right font-bold text-slate-900">
+                        {formatCurrency(item.amount)}
+                      </td>
+                      <td className="p-3.5 pr-5 text-center">
+                        <div className="inline-flex items-center space-x-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (item.type === 'receipt') {
+                                onEditReceipt?.(item.raw as Receipt);
+                              } else {
+                                onEditHandover?.(item.raw as HandoverDocType);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                            title={
+                              item.type === 'receipt'
+                                ? 'เรียกใบเสร็จไปแก้ไขที่หน้าฟอร์ม (บันทึกทับใบเดิม)'
+                                : 'เรียกหนังสือส่งมอบงานไปแก้ไขที่หน้าฟอร์ม (บันทึกทับใบเดิม)'
+                            }
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>แก้ไข</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (item.type === 'receipt') {
+                                setViewingReceipt(item.raw as Receipt);
+                              } else {
+                                setViewingHandover(item.raw as HandoverDocType);
+                              }
+                            }}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                            title="ดูตัวอย่างเอกสาร A4 / พิมพ์ / ดาวน์โหลด"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setItemToDelete({
+                                id: item.id,
+                                type: item.type,
+                                name: `${item.type === 'receipt' ? 'ใบเสร็จรับเงิน' : 'หนังสือส่งมอบงาน'} ${item.docNumber} (${item.subcontractorName})`,
+                              });
+                            }}
+                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="ลบเอกสาร"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {filtered.length === 0 && (
+            <div className="text-center py-12 text-slate-400">
+              <p>ไม่พบเอกสารตามเงื่อนไขที่ค้นหา</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Receipt Viewer Modal */}
       {viewingReceipt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-6">
-            <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between">
+            <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between gap-3">
               <div className="flex items-center space-x-2">
                 <FileText className="w-5 h-5 text-blue-400" />
                 <h3 className="font-bold">
                   ใบเสร็จรับเงิน {viewingReceipt.receiptNumber} - {viewingReceipt.subcontractorName}
                 </h3>
               </div>
-              <button
-                onClick={() => setViewingReceipt(null)}
-                className="text-slate-400 hover:text-white px-2 py-1 text-sm font-medium"
-              >
-                ✕ ปิดหน้าต่าง
-              </button>
+              <div className="flex items-center gap-2">
+                {onEditReceipt && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const rec = viewingReceipt;
+                      setViewingReceipt(null);
+                      onEditReceipt(rec);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>เรียกไปแก้ไขในหน้าฟอร์ม</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setViewingReceipt(null)}
+                  className="text-slate-400 hover:text-white px-2 py-1 text-sm font-medium cursor-pointer"
+                >
+                  ✕ ปิดหน้าต่าง
+                </button>
+              </div>
             </div>
 
             <div className="p-4 bg-slate-50 border-b border-slate-200">
@@ -545,19 +678,35 @@ export const ReceiptArchive: React.FC<ReceiptArchiveProps> = ({
       {viewingHandover && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-6">
-            <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between">
+            <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between gap-3">
               <div className="flex items-center space-x-2">
                 <ClipboardCheck className="w-5 h-5 text-emerald-400" />
                 <h3 className="font-bold">
                   หนังสือส่งมอบงาน {viewingHandover.docNumber} - {viewingHandover.projectName}
                 </h3>
               </div>
-              <button
-                onClick={() => setViewingHandover(null)}
-                className="text-slate-400 hover:text-white px-2 py-1 text-sm font-medium"
-              >
-                ✕ ปิดหน้าต่าง
-              </button>
+              <div className="flex items-center gap-2">
+                {onEditHandover && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const doc = viewingHandover;
+                      setViewingHandover(null);
+                      onEditHandover(doc);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>เรียกไปแก้ไขในหน้าฟอร์ม</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setViewingHandover(null)}
+                  className="text-slate-400 hover:text-white px-2 py-1 text-sm font-medium cursor-pointer"
+                >
+                  ✕ ปิดหน้าต่าง
+                </button>
+              </div>
             </div>
 
             <div className="p-4 bg-slate-50 border-b border-slate-200">

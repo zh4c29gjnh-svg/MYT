@@ -94,7 +94,7 @@ const PHOTO_LAYOUT_OPTIONS: {
 
 function compressImageFileToDataUrl(
   file: File,
-  maxDim = 1500
+  maxDim = 1200
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -123,7 +123,7 @@ function compressImageFileToDataUrl(
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, w, h);
         ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', 0.88));
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
       };
       img.onerror = () => resolve(reader.result as string);
       img.src = reader.result as string;

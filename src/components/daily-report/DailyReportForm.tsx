@@ -174,7 +174,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
     'สวมใส่อุปกรณ์ PPE ครบถ้วน 100% ไม่มีอุบัติเหตุ'
   );
   const [reporterName, setReporterName] = useState<string>(
-    selectedProject?.supervisorName || 'นายปริวิทย์ นวลนาค'
+    selectedProject?.supervisorName || 'นายปรวิทย์ นวลนาค'
   );
 
   const [viewingHistoricalReport, setViewingHistoricalReport] = useState<DailyReport | null>(null);
@@ -184,7 +184,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
     setSelectedProjectId(newProjId);
     const targetProj = projects.find((p) => p.id === newProjId);
     if (targetProj) {
-      setReporterName(targetProj.supervisorName || 'นายปริวิทย์ นวลนาค');
+      setReporterName(targetProj.supervisorName || 'นายปรวิทย์ นวลนาค');
       setAccumulatedProgress(targetProj.progress || 0);
       setSelectedTaskIds([]);
     }

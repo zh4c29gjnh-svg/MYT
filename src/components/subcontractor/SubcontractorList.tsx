@@ -17,9 +17,11 @@ import {
   FileText,
   Image as ImageIcon,
   X,
-  ExternalLink,
+  Camera,
+  Crop,
 } from 'lucide-react';
 import { SubcontractorModal } from './SubcontractorModal.tsx';
+import { IdCardScannerModal } from './IdCardScannerModal.tsx';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal.tsx';
 
 interface SubcontractorListProps {
@@ -27,6 +29,8 @@ interface SubcontractorListProps {
   onSaveSubcontractor: (subcontractor: Subcontractor) => void;
   onDeleteSubcontractor: (id: string) => void;
   onSelectForReceipt?: (subcontractor: Subcontractor) => void;
+  initialEditSubcontractor?: Subcontractor | null;
+  onClearInitialEdit?: () => void;
 }
 
 export const SubcontractorList: React.FC<SubcontractorListProps> = ({
@@ -34,12 +38,26 @@ export const SubcontractorList: React.FC<SubcontractorListProps> = ({
   onSaveSubcontractor,
   onDeleteSubcontractor,
   onSelectForReceipt,
+  initialEditSubcontractor,
+  onClearInitialEdit,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSubcontractor, setEditingSubcontractor] = useState<Subcontractor | null>(null);
   const [viewingIdCardSub, setViewingIdCardSub] = useState<Subcontractor | null>(null);
+  const [scanningIdCardSub, setScanningIdCardSub] = useState<{
+    sub: Subcontractor;
+    initialImage?: string;
+  } | null>(null);
   const [subToDelete, setSubToDelete] = useState<Subcontractor | null>(null);
+
+  React.useEffect(() => {
+    if (initialEditSubcontractor) {
+      setEditingSubcontractor(initialEditSubcontractor);
+      setIsModalOpen(true);
+      onClearInitialEdit?.();
+    }
+  }, [initialEditSubcontractor, onClearInitialEdit]);
 
   const filtered = subcontractors.filter(
     (s) =>
@@ -144,18 +162,43 @@ export const SubcontractorList: React.FC<SubcontractorListProps> = ({
                   </div>
 
                   {/* ID Card Photo badge/trigger */}
-                  {sub.idCardImage ? (
-                    <button
-                      type="button"
-                      onClick={() => setViewingIdCardSub(sub)}
-                      className="inline-flex items-center px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[11px] font-semibold transition-colors"
-                    >
-                      <ImageIcon className="w-3 h-3 mr-1" />
-                      ดูรูปบัตร
-                    </button>
-                  ) : (
-                    <span className="text-[10px] text-slate-400 italic">ไม่มีรูปบัตร</span>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {sub.idCardImage ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setViewingIdCardSub(sub)}
+                          className="inline-flex items-center px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[11px] font-semibold transition-colors cursor-pointer"
+                        >
+                          <ImageIcon className="w-3 h-3 mr-1" />
+                          ดูรูปบัตร
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setScanningIdCardSub({
+                              sub,
+                              initialImage: sub.idCardImage,
+                            })
+                          }
+                          title="ตัดขอบบัตร / ถ่ายรูปบัตรประชาชนใหม่"
+                          className="inline-flex items-center px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-[11px] font-semibold transition-colors cursor-pointer"
+                        >
+                          <Crop className="w-3 h-3 mr-1" />
+                          ตัดขอบบัตร
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setScanningIdCardSub({ sub })}
+                        className="inline-flex items-center px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[11px] font-semibold transition-colors cursor-pointer"
+                      >
+                        <Camera className="w-3 h-3 mr-1" />
+                        ถ่าย/แนบบัตร
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Phone */}
@@ -230,12 +273,12 @@ export const SubcontractorList: React.FC<SubcontractorListProps> = ({
             </div>
 
             <div className="p-5 space-y-4">
-              <div className="relative border border-slate-200 rounded-xl overflow-hidden bg-slate-50 flex items-center justify-center">
+              <div className="relative border border-slate-200 rounded-xl overflow-hidden bg-slate-50 flex items-center justify-center p-2">
                 {viewingIdCardSub.idCardImage ? (
                   <img
                     src={viewingIdCardSub.idCardImage}
                     alt={`บัตรประชาชน ${viewingIdCardSub.name}`}
-                    className="max-h-72 w-auto object-contain"
+                    className="max-h-72 w-auto object-contain rounded-lg"
                   />
                 ) : (
                   <p className="text-xs text-slate-400 p-8">ไม่มีรูปถ่ายสำเนาบัตรประชาชน</p>
@@ -264,11 +307,41 @@ export const SubcontractorList: React.FC<SubcontractorListProps> = ({
                 </div>
               </div>
 
-              <div className="flex justify-end pt-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sub = viewingIdCardSub;
+                      setViewingIdCardSub(null);
+                      setScanningIdCardSub({
+                        sub,
+                        initialImage: sub.idCardImage,
+                      });
+                    }}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold inline-flex items-center cursor-pointer"
+                  >
+                    <Crop className="w-3.5 h-3.5 mr-1.5" />
+                    ตัดขอบ / ดัดบัตรให้ได้สัดส่วน
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sub = viewingIdCardSub;
+                      setViewingIdCardSub(null);
+                      setScanningIdCardSub({ sub });
+                    }}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold inline-flex items-center cursor-pointer"
+                  >
+                    <Camera className="w-3.5 h-3.5 mr-1.5" />
+                    ถ่ายบัตรใหม่
+                  </button>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => setViewingIdCardSub(null)}
-                  className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-xs font-semibold"
+                  className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-xs font-semibold cursor-pointer"
                 >
                   ปิดหน้าต่าง
                 </button>
@@ -277,6 +350,22 @@ export const SubcontractorList: React.FC<SubcontractorListProps> = ({
           </div>
         </div>
       )}
+
+      {/* Quick ID Card Scanner & Cropper Modal from Subcontractor List */}
+      <IdCardScannerModal
+        isOpen={!!scanningIdCardSub}
+        onClose={() => setScanningIdCardSub(null)}
+        initialImage={scanningIdCardSub?.initialImage}
+        onConfirm={(croppedDataUrl) => {
+          if (scanningIdCardSub) {
+            onSaveSubcontractor({
+              ...scanningIdCardSub.sub,
+              idCardImage: croppedDataUrl,
+            });
+            setScanningIdCardSub(null);
+          }
+        }}
+      />
 
       {/* Subcontractor Add/Edit Modal */}
       <SubcontractorModal

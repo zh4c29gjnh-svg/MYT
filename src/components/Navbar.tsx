@@ -16,13 +16,14 @@ import {
   ClipboardCheck,
   Database,
   BarChart2,
-  Clock,
+  Package,
   ListTodo,
   Store,
   CalendarRange,
+  Compass,
 } from 'lucide-react';
 
-export type MainTab = 'receipts' | 'projects' | 'daily_report' | 'seven_eleven';
+export type MainTab = 'receipts' | 'projects' | 'daily_report' | 'seven_eleven' | 'survey';
 
 export type ReceiptSubTab =
   | '1.1_subcontractor'
@@ -34,7 +35,7 @@ export type ReceiptSubTab =
 export type ProjectSubTab =
   | '2.1_projects_overview'
   | '2.2_tasks_kanban'
-  | '2.3_timeline'
+  | '2.3_material_takeoff'
   | '2.4_performance'
   | '2.5_general_workflow';
 
@@ -272,18 +273,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </button>
                   <button
                     onClick={() => {
-                      setActiveProjectSubTab('2.3_timeline');
+                      setActiveProjectSubTab('2.3_material_takeoff');
                       setActiveMainTab('projects');
                       setIsProjectMenuOpen(false);
                     }}
                     className={`w-full px-4 py-2 text-left text-xs font-semibold flex items-center space-x-2.5 hover:bg-blue-50 hover:text-blue-600 ${
-                      activeProjectSubTab === '2.3_timeline'
+                      activeProjectSubTab === '2.3_material_takeoff'
                         ? 'bg-blue-50 text-blue-600'
                         : ''
                     }`}
                   >
-                    <Clock className="w-4 h-4 text-emerald-500" />
-                    <span>2.3 ตารางแสดงแผนงานตามช่วงเวลา</span>
+                    <Package className="w-4 h-4 text-emerald-500" />
+                    <span>2.3 ถอดวัสดุตามกิจกรรม</span>
                   </button>
                   <button
                     onClick={() => {
@@ -404,6 +405,24 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               )}
             </div>
+
+            {/* 5. งานสำรวจ */}
+            <button
+              onClick={() => {
+                setActiveMainTab('survey');
+                setIsReceiptMenuOpen(false);
+                setIsProjectMenuOpen(false);
+                setIsSevenElevenMenuOpen(false);
+              }}
+              className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap ${
+                activeMainTab === 'survey'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Compass className="w-4 h-4" />
+              <span>5. งานสำรวจ</span>
+            </button>
           </nav>
 
           {/* Right Action: Google Workspace Connection Badge */}
@@ -468,6 +487,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               4.เอกสาร 7-11
+            </button>
+            <button
+              onClick={() => setActiveMainTab('survey')}
+              className={`px-2.5 py-1 rounded-md font-semibold ${
+                activeMainTab === 'survey'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-400'
+              }`}
+            >
+              5.งานสำรวจ
             </button>
           </div>
 
@@ -551,14 +580,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                 2.2 กิจกรรมการทำงาน (ทาสก์/งวดงาน)
               </button>
               <button
-                onClick={() => setActiveProjectSubTab('2.3_timeline')}
+                onClick={() => setActiveProjectSubTab('2.3_material_takeoff')}
                 className={`px-3 py-1.5 rounded-lg transition-colors ${
-                  activeProjectSubTab === '2.3_timeline'
+                  activeProjectSubTab === '2.3_material_takeoff'
                     ? 'bg-blue-600 text-white font-bold'
                     : 'text-slate-300 hover:bg-slate-800'
                 }`}
               >
-                2.3 ตารางแสดงแผนงานตามช่วงเวลา
+                2.3 ถอดวัสดุตามกิจกรรม
               </button>
               <button
                 onClick={() => setActiveProjectSubTab('2.4_performance')}
@@ -620,6 +649,17 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 4.2 ใบขออนุมัติตรวจสอบงานก่อสร้าง
               </button>
+            </>
+          )}
+
+          {activeMainTab === 'survey' && (
+            <>
+              <span className="text-slate-500 font-medium mr-1">
+                เมนู 5. งานสำรวจ:
+              </span>
+              <span className="text-slate-300 font-medium">
+                เช็คอินปักหมุดพิกัด GPS มือถือ · คำนวณระยะแต่ละด้านเทียบใบโฉนด · คำนวณเนื้อที่ ไร่-งาน-ตารางวา · ส่งออก PDF / Google Drive
+              </span>
             </>
           )}
         </div>

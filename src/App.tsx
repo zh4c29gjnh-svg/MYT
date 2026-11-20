@@ -17,12 +17,13 @@ import { HandoverForm } from './components/receipts/HandoverForm.tsx';
 import { ReceiptArchive } from './components/receipts/ReceiptArchive.tsx';
 import { ProjectDashboard } from './components/projects/ProjectDashboard.tsx';
 import { ProjectKanban } from './components/projects/ProjectKanban.tsx';
-import { TimelineView } from './components/projects/TimelineView.tsx';
+import { MaterialTakeoffView } from './components/projects/MaterialTakeoffView.tsx';
 import { PerformanceChart } from './components/projects/PerformanceChart.tsx';
 import { GeneralWorkflowView } from './components/projects/GeneralWorkflowView.tsx';
 import { DailyReportForm } from './components/daily-report/DailyReportForm.tsx';
 import { SevenElevenBranchList } from './components/seven-eleven/SevenElevenBranchList.tsx';
 import { SevenElevenInspectionForm } from './components/seven-eleven/SevenElevenInspectionForm.tsx';
+import { LandSurveyView } from './components/survey/LandSurveyView.tsx';
 import { GoogleWorkspaceModal } from './components/workspace/GoogleWorkspaceModal.tsx';
 import {
   getSubcontractors,
@@ -39,6 +40,8 @@ import {
   saveSevenElevenBranches,
   getSevenElevenInspections,
   saveSevenElevenInspections,
+  getLandSurveys,
+  saveLandSurveys,
 } from './utils/storage.ts';
 import {
   Subcontractor,
@@ -48,6 +51,7 @@ import {
   DailyReport,
   SevenElevenBranch,
   SevenElevenInspectionDoc,
+  LandSurveyRecord,
 } from './types/types.ts';
 import { initAuth } from './services/googleAuth.ts';
 
@@ -73,6 +77,7 @@ export default function App() {
   const [sevenElevenInspections, setSevenElevenInspections] = useState<
     SevenElevenInspectionDoc[]
   >([]);
+  const [landSurveys, setLandSurveys] = useState<LandSurveyRecord[]>([]);
 
   // Selected entities
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -80,6 +85,13 @@ export default function App() {
     useState<Subcontractor | null>(null);
   const [selectedSevenElevenBranch, setSelectedSevenElevenBranch] =
     useState<SevenElevenBranch | null>(null);
+
+  // Recall-to-edit entities from 1.6 Archive
+  const [editingReceipt, setEditingReceipt] = useState<Receipt | null>(null);
+  const [editingHandover, setEditingHandover] =
+    useState<HandoverDocument | null>(null);
+  const [editingSubcontractor, setEditingSubcontractor] =
+    useState<Subcontractor | null>(null);
 
   // Google Workspace Modal
   const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
@@ -94,6 +106,7 @@ export default function App() {
     const reports = getDailyReports();
     const branches711 = getSevenElevenBranches();
     const inspections711 = getSevenElevenInspections();
+    const surveys = getLandSurveys();
 
     setSubcontractors(subs);
     setReceipts(recs);
@@ -102,6 +115,7 @@ export default function App() {
     setDailyReports(reports);
     setSevenElevenBranches(branches711);
     setSevenElevenInspections(inspections711);
+    setLandSurveys(surveys);
 
     if (projs.length > 0) {
       setSelectedProject(projs[0]);
@@ -152,12 +166,18 @@ export default function App() {
     }
     setReceipts(updated);
     saveReceipts(updated);
+    if (editingReceipt?.id === receipt.id) {
+      setEditingReceipt(receipt);
+    }
   };
 
   const handleDeleteReceipt = (id: string) => {
     const updated = receipts.filter((r) => r.id !== id);
     setReceipts(updated);
     saveReceipts(updated);
+    if (editingReceipt?.id === id) {
+      setEditingReceipt(null);
+    }
   };
 
   // Handover handlers
@@ -172,12 +192,18 @@ export default function App() {
     }
     setHandovers(updated);
     saveHandovers(updated);
+    if (editingHandover?.id === doc.id) {
+      setEditingHandover(doc);
+    }
   };
 
   const handleDeleteHandover = (id: string) => {
     const updated = handovers.filter((h) => h.id !== id);
     setHandovers(updated);
     saveHandovers(updated);
+    if (editingHandover?.id === id) {
+      setEditingHandover(null);
+    }
   };
 
   // Project handlers
@@ -280,14 +306,58 @@ export default function App() {
     saveSevenElevenInspections(updated);
   };
 
+  // Land Survey (5. งานสำรวจ) handlers
+  const handleSaveLandSurvey = (record: LandSurveyRecord) => {
+    const existingIndex = landSurveys.findIndex((s) => s.id === record.id);
+    let updated: LandSurveyRecord[];
+    if (existingIndex >= 0) {
+      updated = [...landSurveys];
+      updated[existingIndex] = record;
+    } else {
+      updated = [record, ...landSurveys];
+    }
+    setLandSurveys(updated);
+    saveLandSurveys(updated);
+  };
+
+  const handleDeleteLandSurvey = (id: string) => {
+    const updated = landSurveys.filter((s) => s.id !== id);
+    setLandSurveys(updated);
+    saveLandSurveys(updated);
+  };
+
   const handleSelectBranchForInspection = (branch: SevenElevenBranch) => {
     setSelectedSevenElevenBranch(branch);
     setActiveSevenElevenSubTab('4.2_inspection_form');
   };
 
   const handleSelectSubcontractorForReceipt = (sub: Subcontractor) => {
+    setEditingReceipt(null);
     setSelectedSubcontractor(sub);
     setActiveReceiptSubTab('1.2_tax_0');
+  };
+
+  // Recall-to-edit handlers from 1.6 Archive
+  const handleEditReceiptFromArchive = (receipt: Receipt) => {
+    setEditingReceipt(receipt);
+    setActiveMainTab('receipts');
+    if (receipt.type === 'tax_3_retention_5') {
+      setActiveReceiptSubTab('1.4_tax_3_retention_5');
+    } else {
+      setActiveReceiptSubTab('1.2_tax_0');
+    }
+  };
+
+  const handleEditHandoverFromArchive = (doc: HandoverDocument) => {
+    setEditingHandover(doc);
+    setActiveMainTab('receipts');
+    setActiveReceiptSubTab('1.5_handover');
+  };
+
+  const handleEditSubcontractorFromArchive = (sub: Subcontractor) => {
+    setEditingSubcontractor(sub);
+    setActiveMainTab('receipts');
+    setActiveReceiptSubTab('1.1_subcontractor');
   };
 
   const handleSelectProjectFromDashboard = (proj: Project) => {
@@ -325,6 +395,8 @@ export default function App() {
                 onSaveSubcontractor={handleSaveSubcontractor}
                 onDeleteSubcontractor={handleDeleteSubcontractor}
                 onSelectForReceipt={handleSelectSubcontractorForReceipt}
+                initialEditSubcontractor={editingSubcontractor}
+                onClearInitialEdit={() => setEditingSubcontractor(null)}
               />
             )}
 
@@ -338,6 +410,12 @@ export default function App() {
                 onSaveReceipt={handleSaveReceipt}
                 onSaveSubcontractor={handleSaveSubcontractor}
                 selectedSubcontractor={selectedSubcontractor}
+                initialReceipt={
+                  editingReceipt && editingReceipt.type !== 'tax_3_retention_5'
+                    ? editingReceipt
+                    : null
+                }
+                onClearEditReceipt={() => setEditingReceipt(null)}
               />
             )}
 
@@ -351,6 +429,12 @@ export default function App() {
                 onSaveReceipt={handleSaveReceipt}
                 onSaveSubcontractor={handleSaveSubcontractor}
                 selectedSubcontractor={selectedSubcontractor}
+                initialReceipt={
+                  editingReceipt && editingReceipt.type === 'tax_3_retention_5'
+                    ? editingReceipt
+                    : null
+                }
+                onClearEditReceipt={() => setEditingReceipt(null)}
               />
             )}
 
@@ -361,6 +445,8 @@ export default function App() {
                 projects={projects}
                 onSaveHandover={handleSaveHandover}
                 onSaveSubcontractor={handleSaveSubcontractor}
+                initialDoc={editingHandover}
+                onClearEditDoc={() => setEditingHandover(null)}
               />
             )}
 
@@ -373,6 +459,9 @@ export default function App() {
                 projects={projects}
                 onDeleteReceipt={handleDeleteReceipt}
                 onDeleteHandover={handleDeleteHandover}
+                onEditReceipt={handleEditReceiptFromArchive}
+                onEditHandover={handleEditHandoverFromArchive}
+                onEditSubcontractor={handleEditSubcontractorFromArchive}
               />
             )}
           </div>
@@ -444,14 +533,14 @@ export default function App() {
                   />
                 )}
 
-                {/* 2.3 ตารางแสดงแผนงานตามช่วงเวลา */}
-                {activeProjectSubTab === '2.3_timeline' && selectedProject && (
-                  <TimelineView
+                {/* 2.3 ถอดวัสดุตามกิจกรรม */}
+                {activeProjectSubTab === '2.3_material_takeoff' && selectedProject && (
+                  <MaterialTakeoffView
                     project={selectedProject}
-                    projects={projects}
                     onUpdateProject={handleSaveProject}
-                    onDeleteProject={handleDeleteProject}
-                    onSelectProject={setSelectedProject}
+                    onNavigateToKanban={() =>
+                      setActiveProjectSubTab('2.2_tasks_kanban')
+                    }
                   />
                 )}
 
@@ -516,6 +605,18 @@ export default function App() {
               />
             )}
           </div>
+        )}
+
+        {/* ==================================================== */}
+        {/* 5. เมนู งานสำรวจ (เช็คอินปักหมุดพิกัด & เช็คระยะโฉนด) */}
+        {/* ==================================================== */}
+        {activeMainTab === 'survey' && (
+          <LandSurveyView
+            projects={projects}
+            surveys={landSurveys}
+            onSaveSurvey={handleSaveLandSurvey}
+            onDeleteSurvey={handleDeleteLandSurvey}
+          />
         )}
       </main>
 

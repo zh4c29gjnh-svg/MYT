@@ -28,7 +28,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     endDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     budget: 1500000,
     status: 'in_progress',
-    supervisorName: 'นายปริวิทย์ นวลนาค',
+    supervisorName: 'นายปรวิทย์ นวลนาค',
     clientName: 'บมจ. ซีพี ออลล์ (CP ALL)',
     isFollowed: false,
     progress: 0,
@@ -46,7 +46,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         endDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         budget: 1500000,
         status: 'in_progress',
-        supervisorName: 'นายปริวิทย์ นวลนาค',
+        supervisorName: 'นายปรวิทย์ นวลนาค',
         clientName: 'บมจ. ซีพี ออลล์ (CP ALL)',
         isFollowed: false,
         progress: 0,
@@ -69,7 +69,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       endDate: formData.endDate || '',
       budget: Number(formData.budget) || 0,
       status: formData.status || 'in_progress',
-      supervisorName: formData.supervisorName || 'นายปริวิทย์ นวลนาค',
+      supervisorName: formData.supervisorName || 'นายปรวิทย์ นวลนาค',
       clientName: formData.clientName || 'บมจ. ซีพี ออลล์',
       isFollowed: formData.isFollowed || false,
       progress: initialProject?.progress ?? 0,
@@ -201,7 +201,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               </label>
               <input
                 type="text"
-                placeholder="นายปริวิทย์ นวลนาค"
+                placeholder="นายปรวิทย์ นวลนาค"
                 value={formData.supervisorName || ''}
                 onChange={(e) => setFormData({ ...formData, supervisorName: e.target.value })}
                 className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden"

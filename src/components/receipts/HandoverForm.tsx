@@ -23,6 +23,25 @@ interface HandoverFormProps {
   onSaveHandover: (doc: HandoverDocType) => void;
   onSaveSubcontractor?: (subcontractor: Subcontractor) => void;
   initialDoc?: HandoverDocType | null;
+  onClearEditDoc?: () => void;
+}
+
+function padHandoverItems(rawItems?: HandoverItem[]): HandoverItem[] {
+  const base = rawItems && rawItems.length > 0 ? [...rawItems] : [];
+  const padded: HandoverItem[] = [];
+  for (let i = 0; i < 5; i++) {
+    if (base[i]) {
+      padded.push({ ...base[i] });
+    } else {
+      padded.push({
+        id: `itm-${i + 1}`,
+        description: '',
+        unitPrice: 0,
+        totalPrice: 0,
+      });
+    }
+  }
+  return padded;
 }
 
 export const HandoverForm: React.FC<HandoverFormProps> = ({
@@ -30,6 +49,7 @@ export const HandoverForm: React.FC<HandoverFormProps> = ({
   projects,
   onSaveHandover,
   initialDoc,
+  onClearEditDoc,
 }) => {
   const [docDate, setDocDate] = useState<string>(
     initialDoc?.date || new Date().toISOString().split('T')[0]
@@ -65,42 +85,44 @@ export const HandoverForm: React.FC<HandoverFormProps> = ({
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
 
   const [items, setItems] = useState<HandoverItem[]>(
-    initialDoc?.items || [
-      {
-        id: 'itm-1',
-        description: 'งวดที่ 1 งานโครงสร้างเทท็อปปิ้งแล้วเสร็จ',
-        unitPrice: 51546.39,
-        totalPrice: 51546.39,
-      },
-      {
-        id: 'itm-2',
-        description: '',
-        unitPrice: 0,
-        totalPrice: 0,
-      },
-      {
-        id: 'itm-3',
-        description: '',
-        unitPrice: 0,
-        totalPrice: 0,
-      },
-      {
-        id: 'itm-4',
-        description: '',
-        unitPrice: 0,
-        totalPrice: 0,
-      },
-      {
-        id: 'itm-5',
-        description: '',
-        unitPrice: 0,
-        totalPrice: 0,
-      },
-    ]
+    initialDoc?.items
+      ? padHandoverItems(initialDoc.items)
+      : [
+          {
+            id: 'itm-1',
+            description: 'งวดที่ 1 งานโครงสร้างเทท็อปปิ้งแล้วเสร็จ',
+            unitPrice: 51546.39,
+            totalPrice: 51546.39,
+          },
+          {
+            id: 'itm-2',
+            description: '',
+            unitPrice: 0,
+            totalPrice: 0,
+          },
+          {
+            id: 'itm-3',
+            description: '',
+            unitPrice: 0,
+            totalPrice: 0,
+          },
+          {
+            id: 'itm-4',
+            description: '',
+            unitPrice: 0,
+            totalPrice: 0,
+          },
+          {
+            id: 'itm-5',
+            description: '',
+            unitPrice: 0,
+            totalPrice: 0,
+          },
+        ]
   );
 
   const [supervisorName, setSupervisorName] = useState<string>(
-    initialDoc?.supervisorName || 'นายปริวิทย์ นวลนาค'
+    initialDoc?.supervisorName || 'นายปรวิทย์ นวลนาค'
   );
   const [engineerName, setEngineerName] = useState<string>(
     initialDoc?.engineerName || 'วิศวกรโครงการ'
@@ -109,32 +131,50 @@ export const HandoverForm: React.FC<HandoverFormProps> = ({
     initialDoc?.approverName || 'ผู้อนุมัติ'
   );
 
-  // Sync Project changes
-  useEffect(() => {
-    if (selectedProjectId) {
-      const p = projects.find((proj) => proj.id === selectedProjectId);
-      if (p) {
-        setProjectName(p.name);
-        setPoNumber(p.code);
-        if (p.supervisorName) {
-          setSupervisorName(p.supervisorName);
-        }
+  // Sync Project dropdown selection manually
+  const handleSelectProjectDropdown = (projId: string) => {
+    setSelectedProjectId(projId);
+    const p = projects.find((proj) => proj.id === projId);
+    if (p) {
+      setProjectName(p.name);
+      setPoNumber(p.code);
+      if (p.supervisorName) {
+        setSupervisorName(p.supervisorName);
       }
     }
-  }, [selectedProjectId, projects]);
+  };
 
-  // Sync Subcontractor changes (only text fields matching the handover document)
-  useEffect(() => {
-    if (selectedSubId) {
-      const s = subcontractors.find((sub) => sub.id === selectedSubId);
-      if (s) {
-        setSubName(s.name);
-        if (s.skillType) {
-          setContractWorkType(s.skillType);
-        }
+  // Sync Subcontractor dropdown selection manually
+  const handleSelectSubcontractorDropdown = (subId: string) => {
+    setSelectedSubId(subId);
+    const s = subcontractors.find((sub) => sub.id === subId);
+    if (s) {
+      setSubName(s.name);
+      if (s.skillType && !initialDoc) {
+        setContractWorkType(s.skillType);
       }
     }
-  }, [selectedSubId, subcontractors]);
+  };
+
+  // Sync when initialDoc is loaded from 1.6 Archive for editing
+  useEffect(() => {
+    if (initialDoc) {
+      setDocDate(initialDoc.date);
+      setSelectedProjectId(initialDoc.projectId || '');
+      setProjectName(initialDoc.projectName);
+      setPoNumber(initialDoc.poNumber);
+      setPoDate(initialDoc.poDate);
+      setCompletionDate(initialDoc.completionDate);
+      setPeriodNumber(initialDoc.periodNumber);
+      setSelectedSubId(initialDoc.subcontractorId || '');
+      setSubName(initialDoc.subcontractorName);
+      setContractWorkType(initialDoc.contractWorkType);
+      setItems(padHandoverItems(initialDoc.items));
+      setSupervisorName(initialDoc.supervisorName || 'นายปรวิทย์ นวลนาค');
+      setEngineerName(initialDoc.engineerName || 'วิศวกรโครงการ');
+      setApproverName(initialDoc.approverName || 'ผู้อนุมัติ');
+    }
+  }, [initialDoc]);
 
   const handleItemChange = (index: number, field: keyof HandoverItem, value: any) => {
     const updated = [...items];
@@ -179,11 +219,16 @@ export const HandoverForm: React.FC<HandoverFormProps> = ({
 
   const handleSave = () => {
     onSaveHandover(currentDoc);
-    setSaveSuccessMessage('บันทึกหนังสือส่งมอบงานเข้าคลังเอกสารเรียบร้อยแล้ว!');
+    setSaveSuccessMessage(
+      initialDoc
+        ? `บันทึกแก้ไขทับหนังสือส่งมอบงานเลขที่ ${currentDoc.docNumber} เรียบร้อยแล้ว!`
+        : 'บันทึกหนังสือส่งมอบงานเข้าคลังเอกสารเรียบร้อยแล้ว!'
+    );
     setTimeout(() => setSaveSuccessMessage(null), 4000);
   };
 
   const resetSample = () => {
+    onClearEditDoc?.();
     setDocDate('2026-11-10');
     setPoDate('2026-11-10');
     setCompletionDate('2026-11-10');
@@ -207,6 +252,32 @@ export const HandoverForm: React.FC<HandoverFormProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Editing Mode Indicator Banner */}
+      {initialDoc && (
+        <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center space-x-2.5 text-amber-950 text-xs sm:text-sm">
+            <ClipboardCheck className="w-5 h-5 text-amber-600 shrink-0" />
+            <div>
+              <span className="font-bold">
+                โหมดแก้ไขหนังสือส่งมอบงานเดิม: เลขที่ {initialDoc.docNumber}
+              </span>{' '}
+              <span>
+                ({initialDoc.projectName} · งวดที่ {initialDoc.periodNumber}) — เมื่อกด &ldquo;บันทึกเข้าระบบ&rdquo; ระบบจะบันทึกทับใบเดิมโดยใช้เลขที่เอกสารเดิม
+              </span>
+            </div>
+          </div>
+          {onClearEditDoc && (
+            <button
+              type="button"
+              onClick={onClearEditDoc}
+              className="px-3 py-1.5 bg-white hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap self-end sm:self-center cursor-pointer"
+            >
+              + ออกใบส่งมอบงานใบใหม่แทน
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Title */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -270,7 +341,7 @@ export const HandoverForm: React.FC<HandoverFormProps> = ({
               </label>
               <select
                 value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
+                onChange={(e) => handleSelectProjectDropdown(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold"
               >
                 {projects.map((p) => (
@@ -316,7 +387,7 @@ export const HandoverForm: React.FC<HandoverFormProps> = ({
               </label>
               <select
                 value={selectedSubId}
-                onChange={(e) => setSelectedSubId(e.target.value)}
+                onChange={(e) => handleSelectSubcontractorDropdown(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm"
               >
                 {subcontractors.map((s) => (

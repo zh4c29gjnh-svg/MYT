@@ -213,7 +213,7 @@ export const SevenElevenInspectionPrint: React.FC<
   const renderApprovalTitle = (item: SevenElevenInspectionItem) => {
     if (item.itemNumber === 4) {
       return (
-        <div className="flex items-center flex-nowrap whitespace-nowrap gap-x-1.5 text-[11px] leading-none">
+        <div className="flex items-center flex-nowrap whitespace-nowrap gap-x-1 text-[10.5px] leading-none">
           <span className="w-3.5 inline-block shrink-0">4.</span>
           <span className="shrink-0">งานโครงสร้าง</span>
           <span className="inline-flex items-center gap-0.5 shrink-0 ml-0.5">
@@ -234,7 +234,7 @@ export const SevenElevenInspectionPrint: React.FC<
 
     if (item.itemNumber === 7) {
       return (
-        <div className="flex items-center flex-nowrap whitespace-nowrap gap-x-1.5 text-[11px] leading-none">
+        <div className="flex items-center flex-nowrap whitespace-nowrap gap-x-1 text-[10.5px] leading-none">
           <span className="w-3.5 inline-block shrink-0">7.</span>
           <span className="shrink-0">งานโครงสร้าง</span>
           <span className="inline-flex items-center gap-0.5 shrink-0 ml-0.5">
@@ -247,7 +247,7 @@ export const SevenElevenInspectionPrint: React.FC<
           </span>
           <span className="inline-flex items-baseline shrink-0">
             <span>ครั้งที่</span>
-            <span className="border-b border-dotted border-black min-w-[24px] px-1 text-center inline-block ml-0.5">
+            <span className="border-b border-dotted border-black min-w-[22px] px-0.5 text-center inline-block ml-0.5">
               {item.groundTimeNo || ''}
             </span>
           </span>
@@ -256,9 +256,9 @@ export const SevenElevenInspectionPrint: React.FC<
     }
 
     return (
-      <div className="flex items-center flex-nowrap whitespace-nowrap text-[11.5px] leading-none">
-        <span className="w-5 inline-block shrink-0">{item.itemNumber}.</span>
-        <span>{item.title}</span>
+      <div className="flex items-center gap-x-1 text-[11px] leading-tight">
+        <span className="w-4 inline-block shrink-0">{item.itemNumber}.</span>
+        <span className="break-words">{item.title}</span>
       </div>
     );
   };
@@ -379,18 +379,18 @@ export const SevenElevenInspectionPrint: React.FC<
             </div>
           </div>
 
-          {/* Main 9-Column Table */}
-          <table className="w-full border-[1.8px] border-black border-collapse mt-1 text-[12px] table-fixed">
+          {/* Main 9-Column Table (Balanced proportions matching CP ALL B4-FM-04-01-19 template) */}
+          <table className="w-full border-[1.8px] border-black border-collapse mt-1 text-[11.5px] table-fixed">
             <colgroup>
-              <col className="w-[44px]" />
-              <col className="w-[296px]" />
-              <col className="w-[164px]" />
-              <col className="w-[134px]" />
-              <col className="w-[72px]" />
-              <col className="w-[60px]" />
-              <col className="w-[92px]" />
-              <col className="w-[58px]" />
-              <col />
+              <col className="w-[4.2%]" />
+              <col className="w-[35.8%]" />
+              <col className="w-[15%]" />
+              <col className="w-[11.5%]" />
+              <col className="w-[6.5%]" />
+              <col className="w-[5.5%]" />
+              <col className="w-[8.5%]" />
+              <col className="w-[5.5%]" />
+              <col className="w-[7.5%]" />
             </colgroup>
             <thead>
               {/* Group Header Row */}
@@ -408,7 +408,7 @@ export const SevenElevenInspectionPrint: React.FC<
 
               {/* Column Header Row */}
               <tr className="border-b-[1.5px] border-black text-center leading-tight">
-                <th className="border-r border-black py-0.5 px-1 font-bold text-[11px]">
+                <th className="border-r border-black py-0.5 px-0.5 font-bold text-[10.5px]">
                   <div>เลือก</div>
                   <div>หัวข้อ</div>
                 </th>
@@ -416,44 +416,44 @@ export const SevenElevenInspectionPrint: React.FC<
                   รายการอนุมัติ
                 </th>
                 <th className="border-r border-black py-0.5 px-1">
-                  <div className="font-bold text-[11.5px]">รายละเอียด</div>
-                  <div className="font-normal text-[9.5px]">
+                  <div className="font-bold text-[11px]">รายละเอียด</div>
+                  <div className="font-normal text-[9px]">
                     ( เช่น ตำแหน่ง , ปริมาณ หรือ จำนวน )
                   </div>
                 </th>
                 <th className="border-r border-black py-0.5 px-1">
-                  <div className="font-bold text-[11px]">หัวหน้างานผู้รับผิดชอบ</div>
-                  <div className="font-normal text-[9.5px]">
+                  <div className="font-bold text-[10.5px]">หัวหน้างานผู้รับผิดชอบ</div>
+                  <div className="font-normal text-[8.5px]">
                     ( โฟร์แมน หรือ วิศวกร ผรม. )
                   </div>
                 </th>
-                <th className="border-r-[1.5px] border-black py-0.5 px-1">
-                  <div className="font-bold text-[11.5px]">วันที่</div>
-                  <div className="font-normal text-[9.5px]">
+                <th className="border-r-[1.5px] border-black py-0.5 px-0.5">
+                  <div className="font-bold text-[11px]">วันที่</div>
+                  <div className="font-normal text-[8.5px]">
                     นัดหมายตรวจ
                   </div>
                 </th>
                 <th className="border-r border-black py-0.5 px-0.5">
-                  <div className="font-bold text-[10px]">ผลการ</div>
-                  <div className="font-bold text-[10px]">ตรวจ</div>
-                  <div className="font-normal text-[8.5px]">
+                  <div className="font-bold text-[9.5px]">ผลการ</div>
+                  <div className="font-bold text-[9.5px]">ตรวจ</div>
+                  <div className="font-normal text-[8px]">
                     (ผ่าน/ไม่ผ่าน)
                   </div>
                 </th>
                 <th className="border-r border-black py-0.5 px-0.5">
-                  <div className="font-bold text-[10.5px]">กรณีไม่ผ่าน</div>
-                  <div className="font-normal text-[9px]">( แก้ไข )</div>
-                  <div className="font-normal text-[9px]">
-                    เรียบร้อย/ไม่เรียบร้อย
+                  <div className="font-bold text-[10px]">กรณีไม่ผ่าน</div>
+                  <div className="font-normal text-[8.5px]">( แก้ไข )</div>
+                  <div className="font-normal text-[8px] leading-tight">
+                    เรียบร้อย / ไม่เรียบร้อย
                   </div>
                 </th>
                 <th className="border-r border-black py-0.5 px-0.5">
-                  <div className="font-bold text-[10px]">วันที่</div>
-                  <div className="font-normal text-[9.5px]">อนุมัติ</div>
-                  <div className="font-normal text-[9.5px]">ให้เท</div>
-                  <div className="font-normal text-[9.5px]">คอนกรีต</div>
+                  <div className="font-bold text-[9.5px]">วันที่</div>
+                  <div className="font-normal text-[8.5px]">อนุมัติ</div>
+                  <div className="font-normal text-[8.5px]">ให้เท</div>
+                  <div className="font-normal text-[8.5px]">คอนกรีต</div>
                 </th>
-                <th className="py-0.5 px-1 font-bold text-[11.5px]">หมายเหตุ</th>
+                <th className="py-0.5 px-1 font-bold text-[11px]">หมายเหตุ</th>
               </tr>
             </thead>
 
@@ -461,7 +461,7 @@ export const SevenElevenInspectionPrint: React.FC<
               {doc.items.map((item, idx) => {
                 const isLast = idx === doc.items.length - 1;
                 const rowHeightClass =
-                  wf && wf.enabled ? 'h-[22.5px]' : 'h-[24.5px]';
+                  wf && wf.enabled ? 'h-[22px]' : 'h-[24.5px]';
                 return (
                   <tr
                     key={item.itemNumber}
@@ -476,23 +476,23 @@ export const SevenElevenInspectionPrint: React.FC<
                       <SquareBox checked={item.checked} />
                     </td>
 
-                    {/* Col 2: Approval Item Title (Single line for 4 & 7) */}
-                    <td className="border-r border-black px-1.5 align-middle text-black overflow-hidden">
+                    {/* Col 2: Approval Item Title (Full text, never clipped) */}
+                    <td className="border-r border-black px-1.5 align-middle text-black">
                       {renderApprovalTitle(item)}
                     </td>
 
                     {/* Col 3: Details */}
-                    <td className="border-r border-black px-1.5 align-middle text-[11.5px] font-medium text-black truncate">
+                    <td className="border-r border-black px-1.5 py-0.5 align-middle text-[10.5px] font-medium text-black leading-tight break-words">
                       {item.checked ? item.details : ''}
                     </td>
 
                     {/* Col 4: Responsible Person */}
-                    <td className="border-r border-black px-1.5 align-middle text-[11.5px] font-medium text-black truncate">
+                    <td className="border-r border-black px-1.5 py-0.5 align-middle text-[10.5px] font-medium text-black leading-tight break-words">
                       {item.checked ? item.responsiblePerson : ''}
                     </td>
 
                     {/* Col 5: Appointment Date */}
-                    <td className="border-r-[1.5px] border-black px-1.5 align-middle text-right text-[11px] font-medium text-black">
+                    <td className="border-r-[1.5px] border-black px-1 align-middle text-center text-[10.5px] font-medium text-black whitespace-nowrap">
                       {item.checked ? item.inspectionDate : ''}
                     </td>
 
@@ -852,12 +852,20 @@ export const SevenElevenInspectionPrint: React.FC<
             {/* Bottom Signatures & Document Editor Footer */}
             <div className="mt-2 pt-1 shrink-0">
               <div className="grid grid-cols-12 items-end text-[11px]">
-                <div className="col-span-5 flex items-baseline pr-4">
-                  <span className="font-medium text-black mr-2 shrink-0">
+                <div className="col-span-5 flex items-end pr-4">
+                  <span className="font-medium text-black mr-2 shrink-0 leading-none pb-0.5">
                     ผู้ขออนุมัติ
                   </span>
-                  <span className="flex-1 border-b border-dotted border-black"></span>
-                  <span className="ml-2 text-black shrink-0">
+                  <div className="flex-1 relative border-b border-dotted border-black min-h-[24px] flex items-end justify-center">
+                    {doc.supervisorSignature && (
+                      <img
+                        src={doc.supervisorSignature}
+                        alt={`ลายเซ็น ${requesterName}`}
+                        className="max-h-[30px] max-w-[140px] object-contain -mb-[2px] mix-blend-multiply pointer-events-none select-none"
+                      />
+                    )}
+                  </div>
+                  <span className="ml-2 text-black shrink-0 leading-none pb-0.5">
                     ( {requesterName} )
                   </span>
                 </div>
@@ -1020,12 +1028,20 @@ export const SevenElevenInspectionPrint: React.FC<
             {/* Bottom Signatures & Document Editor Footer */}
             <div className="mt-2 pt-1 shrink-0">
               <div className="grid grid-cols-12 items-end text-[11px]">
-                <div className="col-span-5 flex items-baseline pr-4">
-                  <span className="font-medium text-black mr-2 shrink-0">
+                <div className="col-span-5 flex items-end pr-4">
+                  <span className="font-medium text-black mr-2 shrink-0 leading-none pb-0.5">
                     ผู้ขออนุมัติ
                   </span>
-                  <span className="flex-1 border-b border-dotted border-black"></span>
-                  <span className="ml-2 text-black shrink-0">
+                  <div className="flex-1 relative border-b border-dotted border-black min-h-[24px] flex items-end justify-center">
+                    {doc.supervisorSignature && (
+                      <img
+                        src={doc.supervisorSignature}
+                        alt={`ลายเซ็น ${requesterName}`}
+                        className="max-h-[30px] max-w-[140px] object-contain -mb-[2px] mix-blend-multiply pointer-events-none select-none"
+                      />
+                    )}
+                  </div>
+                  <span className="ml-2 text-black shrink-0 leading-none pb-0.5">
                     ( {requesterName} )
                   </span>
                 </div>

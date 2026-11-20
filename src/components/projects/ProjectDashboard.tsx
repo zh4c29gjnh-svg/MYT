@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { ProjectModal } from './ProjectModal.tsx';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal.tsx';
+import { calculateProjectWeightedStats } from '../../utils/projectWeights.ts';
 
 interface ProjectDashboardProps {
   projects: Project[];
@@ -67,14 +68,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       : project.progress === 100
       ? totalTasks
       : Math.round((project.progress / 100) * totalTasks);
-    const calculatedPercent = hasTasks
-      ? (
-          project.tasks.reduce(
-            (acc, t) => acc + (t.progressPercent ?? (t.completed ? 100 : 0)),
-            0
-          ) / totalTasks
-        ).toFixed(2)
-      : project.progress.toFixed(2);
+    const weightedSummary = calculateProjectWeightedStats(project);
+    const calculatedPercent = weightedSummary.projectProgressPercent.toFixed(2);
 
     const isDone = parseFloat(calculatedPercent) >= 100;
 

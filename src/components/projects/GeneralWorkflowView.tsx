@@ -11,6 +11,11 @@ import {
   TaskPriority,
 } from '../../types/types.ts';
 import {
+  calculateProjectWeightedStats,
+  calculateGroupWeightedStats,
+  getTaskProgressPercent,
+} from '../../utils/projectWeights.ts';
+import {
   Search,
   X,
   ChevronDown,
@@ -19,6 +24,9 @@ import {
   Plus,
   UserPlus,
   ArrowRight,
+  ArrowLeft,
+  ChevronsLeft,
+  ChevronsRight,
   Edit3,
   Trash2,
   Calendar,
@@ -138,7 +146,18 @@ function getBadgeStyle(badgeLabel?: string, fallbackCompleted?: boolean) {
   return { label, bgClass: 'bg-[#a6adb4]', textClass: 'text-white' };
 }
 
-function recalculateProjectProgress(tasks: ProjectTask[]): number {
+function recalculateProjectProgress(
+  tasks: ProjectTask[],
+  projectContext?: Project,
+  groupsOverride?: ProjectGroup[]
+): number {
+  if (projectContext) {
+    return calculateProjectWeightedStats({
+      ...projectContext,
+      groups: groupsOverride || projectContext.groups,
+      tasks,
+    }).projectProgressPercent;
+  }
   if (tasks.length === 0) return 0;
   const total = tasks.reduce((acc, t) => {
     const pct =
@@ -151,7 +170,7 @@ function recalculateProjectProgress(tasks: ProjectTask[]): number {
         : 0;
     return acc + pct;
   }, 0);
-  return Number((total / tasks.length).toFixed(1));
+  return Number((total / tasks.length).toFixed(2));
 }
 
 const TeamAvatarCluster: React.FC<{
@@ -206,6 +225,8 @@ interface EditItemModalState {
   groupName: string;
   supervisorOrAssignee: string;
   teamCount: number;
+  weightPercent: number;
+  progressPercent: number;
   workflowBadge: string;
   startDate: string;
   endDate: string;
@@ -232,32 +253,43 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
     'newest' | 'oldest' | 'name' | 'progress'
   >('newest');
 
-  // Calendar Window State (Syncs to active project's start date month)
-  const [viewAnchorDate, setViewAnchorDate] = useState<Date>(() => {
-    const parsed = parseIsoDate(activeProject.startDate);
-    return parsed
-      ? new Date(parsed.getFullYear(), parsed.getMonth(), 1, 12, 0, 0)
-      : new Date(2026, 5, 1, 12, 0, 0);
-  });
+  const getDefaultWindowStart = (proj: Project): Date => {
+    const parsed = parseIsoDate(proj.startDate);
+    if (parsed) {
+      const d = new Date(
+        parsed.getFullYear(),
+        parsed.getMonth(),
+        parsed.getDate(),
+        12,
+        0,
+        0
+      );
+      if (proj.id !== 'prj-somjai') {
+        d.setDate(d.getDate() - 4); // Start 4 days before project start so the bar start is clearly visible
+      }
+      return d;
+    }
+    return new Date(2026, 4, 27, 12, 0, 0);
+  };
+
+  // Calendar Window State (viewAnchorDate = exact first visible day of the calendar window)
+  const [viewAnchorDate, setViewAnchorDate] = useState<Date>(() =>
+    getDefaultWindowStart(activeProject)
+  );
   const [highlightedDateIso, setHighlightedDateIso] = useState<string>(() => {
     if (activeProject.id === 'prj-somjai') return '2026-06-10';
     return activeProject.startDate || '2026-06-10';
   });
   const [calendarSpanDays, setCalendarSpanDays] = useState<number>(28); // 28 days (e.g. 27 May - 23 June)
 
-  // Whenever the selected project changes, jump calendar to that project's schedule month
+  // Whenever the selected project changes, jump calendar to that project's schedule window
   useEffect(() => {
-    const parsed = parseIsoDate(activeProject.startDate);
-    if (parsed) {
-      setViewAnchorDate(
-        new Date(parsed.getFullYear(), parsed.getMonth(), 1, 12, 0, 0)
-      );
-      setHighlightedDateIso(
-        activeProject.id === 'prj-somjai'
-          ? '2026-06-10'
-          : activeProject.startDate
-      );
-    }
+    setViewAnchorDate(getDefaultWindowStart(activeProject));
+    setHighlightedDateIso(
+      activeProject.id === 'prj-somjai'
+        ? '2026-06-10'
+        : activeProject.startDate || '2026-06-10'
+    );
   }, [activeProject.id, activeProject.startDate]);
 
   // Expand / Collapse states for Projects and Phases
@@ -281,17 +313,16 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
   // Modal state for creating/editing Project, Phase, or Task
   const [modalState, setModalState] = useState<EditItemModalState | null>(null);
 
-  // Build visible daily columns (starting 5 days before anchor month start so 27..30 of prev month appear just like screenshot!)
+  // Build visible daily columns directly starting from viewAnchorDate
   const visibleDays = useMemo(() => {
     const start = new Date(
       viewAnchorDate.getFullYear(),
       viewAnchorDate.getMonth(),
-      1,
+      viewAnchorDate.getDate(),
       12,
       0,
       0
     );
-    start.setDate(start.getDate() - 5); // e.g., May 27 when anchor is June 1
     const list: {
       iso: string;
       dayNum: number;
@@ -315,9 +346,29 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
     return list;
   }, [viewAnchorDate, calendarSpanDays]);
 
+  const middleDay = useMemo(() => {
+    const mid = new Date(viewAnchorDate.getTime());
+    mid.setDate(mid.getDate() + Math.floor(calendarSpanDays / 3));
+    return mid;
+  }, [viewAnchorDate, calendarSpanDays]);
+
   const currentMonthTitle = `${
-    THAI_MONTHS_SHORT[viewAnchorDate.getMonth()]
-  } ${viewAnchorDate.getFullYear()}`;
+    THAI_MONTHS_SHORT[middleDay.getMonth()]
+  } ${middleDay.getFullYear()}`;
+
+  const visibleRangeLabel = useMemo(() => {
+    if (visibleDays.length === 0) return '';
+    const first = parseIsoDate(visibleDays[0].iso);
+    const last = parseIsoDate(visibleDays[visibleDays.length - 1].iso);
+    if (!first || !last) return '';
+    return `${first.getDate()} ${THAI_MONTHS_SHORT[first.getMonth()]} - ${last.getDate()} ${THAI_MONTHS_SHORT[last.getMonth()]} ${last.getFullYear()}`;
+  }, [visibleDays]);
+
+  // Offset in days from project default window start (for the bottom horizontal scrubber)
+  const timelineDayOffset = useMemo(() => {
+    const base = getDefaultWindowStart(activeProject);
+    return Math.round((viewAnchorDate.getTime() - base.getTime()) / 86400000);
+  }, [viewAnchorDate, activeProject.id, activeProject.startDate]);
 
   // Single separated project view: never mix multiple projects together
   const filteredProjects = useMemo(() => {
@@ -344,25 +395,62 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
     });
   };
 
+  // Shift calendar by N days (e.g. -7 / +7 days)
+  const handleShiftDays = (deltaDays: number) => {
+    setViewAnchorDate((prev) => {
+      const next = new Date(
+        prev.getFullYear(),
+        prev.getMonth(),
+        prev.getDate() + deltaDays,
+        12,
+        0,
+        0
+      );
+      return next;
+    });
+  };
+
   // Helper to shift calendar month
   const handleShiftMonth = (deltaMonths: number) => {
-    setViewAnchorDate(
-      (prev) =>
-        new Date(prev.getFullYear(), prev.getMonth() + deltaMonths, 1, 12, 0, 0)
-    );
+    setViewAnchorDate((prev) => {
+      const next = new Date(
+        prev.getFullYear(),
+        prev.getMonth() + deltaMonths,
+        prev.getDate(),
+        12,
+        0,
+        0
+      );
+      return next;
+    });
   };
 
   const handleJumpToDate = (isoDate?: string) => {
     const parsed = parseIsoDate(isoDate);
     if (parsed) {
-      setViewAnchorDate(
-        new Date(parsed.getFullYear(), parsed.getMonth(), 1, 12, 0, 0)
+      const targetAnchor = new Date(
+        parsed.getFullYear(),
+        parsed.getMonth(),
+        parsed.getDate() - 3,
+        12,
+        0,
+        0
       );
+      setViewAnchorDate(targetAnchor);
       setHighlightedDateIso(toIsoDate(parsed));
     } else {
-      // Jump to June 2026 reference
-      setViewAnchorDate(new Date(2026, 5, 1, 12, 0, 0));
-      setHighlightedDateIso('2026-06-10');
+      const today = new Date();
+      const todayIso = toIsoDate(today);
+      const targetAnchor = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate() - 5,
+        12,
+        0,
+        0
+      );
+      setViewAnchorDate(targetAnchor);
+      setHighlightedDateIso(todayIso);
     }
   };
 
@@ -412,15 +500,57 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
             : next === 'In Progress'
             ? ('in_progress' as const)
             : ('pending' as const),
-          progressPercent: isDone ? 100 : t.progressPercent || 30,
+          progressPercent: isDone ? 100 : getTaskProgressPercent(t) >= 100 ? 50 : getTaskProgressPercent(t),
         };
       });
       onUpdateProject({
         ...project,
         tasks: updatedTasks,
-        progress: recalculateProjectProgress(updatedTasks),
+        progress: recalculateProjectProgress(updatedTasks, project),
       });
     }
+  };
+
+  // Inline task progress % change directly from General Workflow
+  const handleInlineTaskProgressChange = (
+    proj: Project,
+    taskId: string,
+    rawPercent: number
+  ) => {
+    const clamped = Math.min(
+      100,
+      Math.max(0, isNaN(rawPercent) ? 0 : Math.round(rawPercent))
+    );
+    const isDone = clamped >= 100;
+    const updatedTasks = proj.tasks.map((t) => {
+      if (t.id !== taskId) return t;
+      const currentOpt = WORKFLOW_BADGE_OPTIONS.find(
+        (b) => b.label === t.workflowBadge
+      );
+      let nextBadge = t.workflowBadge || (isDone ? 'Completed' : 'Pending');
+      if (isDone && !currentOpt?.marksCompleted) {
+        nextBadge = 'Completed';
+      } else if (!isDone && currentOpt?.marksCompleted) {
+        nextBadge = clamped > 0 ? 'In Progress' : 'Pending';
+      }
+      return {
+        ...t,
+        progressPercent: clamped,
+        completed: isDone,
+        status: isDone
+          ? ('completed' as const)
+          : clamped > 0
+          ? ('in_progress' as const)
+          : ('pending' as const),
+        workflowBadge: nextBadge,
+      };
+    });
+
+    onUpdateProject({
+      ...proj,
+      tasks: updatedTasks,
+      progress: recalculateProjectProgress(updatedTasks, proj),
+    });
   };
 
   // Commit drag-to-schedule dates on Gantt grid
@@ -467,7 +597,7 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
         endDate: modalState.endDate || '2026-06-30',
         budget: 2000000,
         status: 'in_progress',
-        supervisorName: modalState.supervisorOrAssignee || 'นายปริวิทย์ นวลนาค',
+        supervisorName: modalState.supervisorOrAssignee || 'นายปรวิทย์ นวลนาค',
         isFollowed: true,
         progress: 0,
         teamCount: modalState.teamCount,
@@ -515,16 +645,19 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
       const newGroup: ProjectGroup = {
         id: `grp-${Date.now()}`,
         name: modalState.title.trim(),
+        weightPercent: Math.min(100, Math.max(0, Number(modalState.weightPercent) || 0)),
         assignedTo: modalState.supervisorOrAssignee.trim(),
         teamCount: modalState.teamCount,
         workflowBadge: modalState.workflowBadge,
         startDate: modalState.startDate || undefined,
         endDate: modalState.endDate || undefined,
       };
+      const nextGroups = [...(proj.groups || []), newGroup];
       onUpdateProject({
         ...proj,
         groupsInitialized: true,
-        groups: [...(proj.groups || []), newGroup],
+        groups: nextGroups,
+        progress: recalculateProjectProgress(proj.tasks, proj, nextGroups),
       });
     } else if (modalState.mode === 'edit_phase' && modalState.groupId) {
       const oldGroup = proj.groups.find((g) => g.id === modalState.groupId);
@@ -534,6 +667,7 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
           ? {
               ...g,
               name: newPhaseName,
+              weightPercent: Math.min(100, Math.max(0, Number(modalState.weightPercent) || 0)),
               assignedTo: modalState.supervisorOrAssignee.trim(),
               teamCount: modalState.teamCount,
               workflowBadge: modalState.workflowBadge,
@@ -551,40 +685,57 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
         ...proj,
         groups: updatedGroups,
         tasks: updatedTasks,
+        progress: recalculateProjectProgress(updatedTasks, proj, updatedGroups),
       });
     } else if (modalState.mode === 'create_task') {
+      const clampedPct = Math.min(
+        100,
+        Math.max(0, Math.round(Number(modalState.progressPercent) || 0))
+      );
       const badgeOpt = WORKFLOW_BADGE_OPTIONS.find(
         (b) => b.label === modalState.workflowBadge
       );
-      const isDone = !!badgeOpt?.marksCompleted;
+      const isDone = clampedPct >= 100 || !!badgeOpt?.marksCompleted;
+      const finalPct = isDone ? 100 : clampedPct;
       const newTask: ProjectTask = {
         id: `tsk-${Date.now()}`,
         projectId: proj.id,
         groupName: modalState.groupName,
         title: modalState.title.trim(),
         priority: modalState.priority,
-        status: isDone ? 'completed' : 'pending',
+        status: isDone ? 'completed' : finalPct > 0 ? 'in_progress' : 'pending',
         completed: isDone,
-        progressPercent: isDone ? 100 : 0,
+        progressPercent: finalPct,
         assignedTo: modalState.supervisorOrAssignee.trim(),
         teamCount: modalState.teamCount,
         workflowBadge: modalState.workflowBadge,
         startDate: modalState.startDate || undefined,
         endDate: modalState.endDate || undefined,
         hasSubArrow: modalState.hasSubArrow,
-        weightPercent: 10,
+        weightPercent: Math.min(100, Math.max(0, Number(modalState.weightPercent) || 0)),
       };
       const nextTasks = [...proj.tasks, newTask];
       onUpdateProject({
         ...proj,
         tasks: nextTasks,
-        progress: recalculateProjectProgress(nextTasks),
+        progress: recalculateProjectProgress(nextTasks, proj),
       });
     } else if (modalState.mode === 'edit_task' && modalState.taskId) {
-      const badgeOpt = WORKFLOW_BADGE_OPTIONS.find(
+      const clampedPct = Math.min(
+        100,
+        Math.max(0, Math.round(Number(modalState.progressPercent) || 0))
+      );
+      const isDone = clampedPct >= 100;
+      const currentOpt = WORKFLOW_BADGE_OPTIONS.find(
         (b) => b.label === modalState.workflowBadge
       );
-      const isDone = !!badgeOpt?.marksCompleted;
+      let finalBadge = modalState.workflowBadge;
+      if (isDone && !currentOpt?.marksCompleted) {
+        finalBadge = 'Completed';
+      } else if (!isDone && currentOpt?.marksCompleted) {
+        finalBadge = clampedPct > 0 ? 'In Progress' : 'Pending';
+      }
+
       const nextTasks = proj.tasks.map((t) =>
         t.id === modalState.taskId
           ? {
@@ -593,10 +744,15 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
               groupName: modalState.groupName || t.groupName,
               assignedTo: modalState.supervisorOrAssignee.trim(),
               teamCount: modalState.teamCount,
-              workflowBadge: modalState.workflowBadge,
+              weightPercent: Math.min(100, Math.max(0, Number(modalState.weightPercent) || 0)),
+              workflowBadge: finalBadge,
               completed: isDone,
-              status: isDone ? ('completed' as const) : ('pending' as const),
-              progressPercent: isDone ? 100 : t.progressPercent || 30,
+              status: isDone
+                ? ('completed' as const)
+                : clampedPct > 0
+                ? ('in_progress' as const)
+                : ('pending' as const),
+              progressPercent: clampedPct,
               startDate: modalState.startDate || undefined,
               endDate: modalState.endDate || undefined,
               hasSubArrow: modalState.hasSubArrow,
@@ -606,7 +762,7 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
       onUpdateProject({
         ...proj,
         tasks: nextTasks,
-        progress: recalculateProjectProgress(nextTasks),
+        progress: recalculateProjectProgress(nextTasks, proj),
       });
     }
 
@@ -648,8 +804,36 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
     endDate?: string,
     barLabel?: string,
     groupId?: string,
-    taskId?: string
+    taskId?: string,
+    taskProgressPercent?: number
   ) => {
+    const isTaskRow = targetType === 'task';
+
+    // Project and Phase/Installment rows are header rows — do not render Gantt bars on them
+    if (!isTaskRow) {
+      return (
+        <div
+          className="grid relative select-none h-[42px]"
+          style={{
+            gridTemplateColumns: `repeat(${visibleDays.length}, minmax(30px, 1fr))`,
+          }}
+        >
+          {visibleDays.map((day) => (
+            <div
+              key={day.iso}
+              className={`border-r border-b border-slate-200/80 h-[42px] relative ${
+                day.isWeekend
+                  ? 'bg-slate-100/80'
+                  : targetType === 'project'
+                  ? 'bg-slate-50/60'
+                  : 'bg-slate-50/30'
+              }`}
+            />
+          ))}
+        </div>
+      );
+    }
+
     const isDraggingThisRow =
       dragSchedule &&
       dragSchedule.targetType === targetType &&
@@ -672,11 +856,28 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
     const lastVisibleIso = visibleDays[visibleDays.length - 1]?.iso || '';
 
     const hasSchedule = !!(effStart && effEnd);
-    const isBarVisibleInWindow =
-      hasSchedule && effEnd! >= firstVisibleIso && effStart! <= lastVisibleIso;
 
-    // Show right jump arrow button [→] like KANNA when row has no visible bar or extends to right
-    const showRightJumpArrow = !isBarVisibleInWindow || (hasSchedule && effEnd! > lastVisibleIso);
+    // Show left jump arrow [←] when task bar is to the left of the visible window
+    const showLeftJumpArrow =
+      hasSchedule && (effStart! < firstVisibleIso || effEnd! < firstVisibleIso);
+
+    // Show right jump arrow button [→] when task row has no visible bar or extends to right
+    const showRightJumpArrow =
+      !hasSchedule || effEnd! > lastVisibleIso || effStart! > lastVisibleIso;
+
+    const startDt = effStart ? parseIsoDate(effStart) : null;
+    const endDt = effEnd ? parseIsoDate(effEnd) : null;
+    const totalTaskDays =
+      startDt && endDt
+        ? Math.max(
+            1,
+            Math.round((endDt.getTime() - startDt.getTime()) / 86400000) + 1
+          )
+        : 1;
+    const clampedTaskProgress = Math.min(
+      100,
+      Math.max(0, Math.round(taskProgressPercent ?? 0))
+    );
 
     return (
       <div
@@ -697,6 +898,32 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
             inBar &&
             (dIdx === visibleDays.length - 1 ||
               visibleDays[dIdx + 1].iso > effEnd!);
+
+          // Calculate how much of this specific day cell is filled by yellow actual progress (0..100%)
+          let yellowInCellPct = 0;
+          if (inBar && startDt && clampedTaskProgress > 0) {
+            const dayDt = parseIsoDate(day.iso);
+            const dayOffset = dayDt
+              ? Math.max(
+                  0,
+                  Math.round((dayDt.getTime() - startDt.getTime()) / 86400000)
+                )
+              : 0;
+            const cellStartPct = (dayOffset / totalTaskDays) * 100;
+            const cellEndPct = ((dayOffset + 1) / totalTaskDays) * 100;
+
+            if (clampedTaskProgress >= cellEndPct) {
+              yellowInCellPct = 100;
+            } else if (clampedTaskProgress > cellStartPct) {
+              yellowInCellPct =
+                ((clampedTaskProgress - cellStartPct) /
+                  (cellEndPct - cellStartPct)) *
+                100;
+            }
+          }
+
+          const isPartialYellowBoundary =
+            yellowInCellPct > 0 && yellowInCellPct < 99.9;
 
           return (
             <div
@@ -719,20 +946,47 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                 }
               }}
               onMouseUp={commitDragSchedule}
-              title={`คลิกหรือลากเพื่อตั้งวันที่ (${day.iso})`}
+              title={
+                inBar
+                  ? `${barLabel || 'ทาสก์'} • ความคืบหน้าทำจริง ${clampedTaskProgress}% / 100% (${effStart} ถึง ${effEnd})`
+                  : `คลิกหรือลากเพื่อตั้งวันที่ของทาสก์ (${day.iso})`
+              }
               className={`border-r border-b border-slate-200/80 h-[42px] relative flex items-center cursor-pointer transition-colors ${
                 day.isWeekend ? 'bg-slate-100/75' : 'bg-white'
               } hover:bg-emerald-50/40`}
             >
               {inBar && (
                 <div
-                  className={`h-[24px] w-full bg-[#ccebd7]/95 border-y border-[#8fd1a8] flex items-center ${
+                  className={`h-[24px] w-full bg-[#ccebd7]/95 border-y border-[#8fd1a8] relative flex items-center ${
                     isBarStart ? 'rounded-l-md border-l ml-0.5' : ''
                   } ${isBarEnd ? 'rounded-r-md border-r mr-0.5' : ''}`}
                 >
+                  {/* Yellow Progress Overlay (1% - 100% of task bar) for Task rows */}
+                  {yellowInCellPct > 0 && (
+                    <div
+                      className={`absolute -top-[1px] -bottom-[1px] left-0 bg-[#facc15] border-y border-[#ca8a04] pointer-events-none transition-all duration-200 ${
+                        isBarStart ? 'rounded-l-md border-l -left-[1px]' : ''
+                      } ${
+                        isBarEnd && yellowInCellPct >= 99.9
+                          ? 'rounded-r-md border-r -right-[1px]'
+                          : ''
+                      } ${
+                        isPartialYellowBoundary
+                          ? 'border-r-2 border-r-[#b45309]'
+                          : ''
+                      }`}
+                      style={{
+                        width: `${Math.min(100, Math.max(0, yellowInCellPct))}%`,
+                      }}
+                    />
+                  )}
+
                   {isBarStart && barLabel && (
-                    <span className="text-[11px] font-semibold text-slate-800 pl-2 whitespace-nowrap z-10 pointer-events-none">
-                      {barLabel}
+                    <span className="text-[11px] font-semibold text-slate-900 pl-2 whitespace-nowrap z-10 pointer-events-none inline-flex items-center gap-1.5 drop-shadow-[0_1px_0_rgba(255,255,255,0.75)]">
+                      <span>{barLabel}</span>
+                      <span className="px-1.5 py-0.2 rounded bg-slate-900/75 text-amber-300 text-[10px] font-bold">
+                        {clampedTaskProgress}%
+                      </span>
                     </span>
                   )}
                 </div>
@@ -741,39 +995,65 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
           );
         })}
 
-        {/* Quick Right Arrow [→] Button matching KANNA screenshot */}
+        {/* Quick Left Arrow [←] Button when task bar starts/lies to the left of the current window */}
+        {showLeftJumpArrow && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (
+                effStart &&
+                effStart < firstVisibleIso &&
+                effEnd &&
+                effEnd >= firstVisibleIso
+              ) {
+                handleShiftDays(-7);
+              } else {
+                handleJumpToDate(effStart);
+              }
+            }}
+            title={`เลื่อนปฏิทินไปทางซ้าย (${effStart})`}
+            className="absolute left-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded bg-slate-200/90 hover:bg-emerald-600 text-slate-600 hover:text-white flex items-center justify-center shadow-2xs transition-colors z-20 cursor-pointer"
+          >
+            <ArrowLeft className="w-3 h-3" />
+          </button>
+        )}
+
+        {/* Quick Right Arrow [→] Button on task row */}
         {showRightJumpArrow && (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               if (hasSchedule) {
-                handleJumpToDate(effStart);
-              } else {
-                // Default to setting dates in the current month
-                const defStart = '2026-06-05';
-                const defEnd = '2026-06-20';
-                if (targetType === 'phase' && groupId) {
-                  const updatedGroups = project.groups.map((g) =>
-                    g.id === groupId
-                      ? { ...g, startDate: defStart, endDate: defEnd }
-                      : g
-                  );
-                  onUpdateProject({ ...project, groups: updatedGroups });
-                } else if (targetType === 'task' && taskId) {
-                  const updatedTasks = project.tasks.map((t) =>
-                    t.id === taskId
-                      ? { ...t, startDate: defStart, endDate: defEnd }
-                      : t
-                  );
-                  onUpdateProject({ ...project, tasks: updatedTasks });
+                if (effStart! > lastVisibleIso) {
+                  handleJumpToDate(effStart);
+                } else {
+                  handleShiftDays(7);
                 }
+              } else if (taskId) {
+                const defStart =
+                  visibleDays[2]?.iso ||
+                  activeProject.startDate ||
+                  '2026-06-05';
+                const defEnd =
+                  visibleDays[Math.min(12, visibleDays.length - 2)]?.iso ||
+                  activeProject.endDate ||
+                  '2026-06-20';
+                const updatedTasks = project.tasks.map((t) =>
+                  t.id === taskId
+                    ? { ...t, startDate: defStart, endDate: defEnd }
+                    : t
+                );
+                onUpdateProject({ ...project, tasks: updatedTasks });
               }
             }}
             title={
               hasSchedule
-                ? `เลื่อนปฏิทินไปที่ ${effStart}`
-                : 'คลิกเพื่อกำหนดแถบเวลาในเดือนนี้'
+                ? effStart! > lastVisibleIso
+                  ? `เลื่อนปฏิทินไปที่จุดเริ่ม (${effStart})`
+                  : `เลื่อนปฏิทินไปทางขวาเพื่อดูถึงวันสิ้นสุด (${effEnd})`
+                : 'คลิกเพื่อกำหนดแถบเวลาของทาสก์ในช่วงวันที่แสดงอยู่'
             }
             className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded bg-slate-200/90 hover:bg-emerald-600 text-slate-600 hover:text-white flex items-center justify-center shadow-2xs transition-colors z-20 cursor-pointer"
           >
@@ -815,9 +1095,16 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <span>
-            คลิกหรือลากบนช่องวันที่เพื่อกำหนดแถบแผนงาน (Gantt) • คลิกที่ป้ายสถานะเพื่อเปลี่ยนสถานะทันที
+        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200">
+            <span className="w-3.5 h-3 rounded-xs bg-[#facc15] border border-[#ca8a04] inline-block" />
+            <span className="font-semibold text-slate-700">% ทาสก์ทำจริง (ความคืบหน้า)</span>
+            <span className="text-slate-300">•</span>
+            <span className="w-3.5 h-3 rounded-xs bg-[#ccebd7] border border-[#8fd1a8] inline-block" />
+            <span className="font-semibold text-slate-700">แผนงานทาสก์ 100%</span>
+          </div>
+          <span className="text-slate-500 hidden xl:inline">
+            คลิกหรือลากบนช่องวันที่เพื่อกำหนดแถบแผนงาน (Gantt)
           </span>
         </div>
       </div>
@@ -888,34 +1175,84 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
           </label>
         </div>
 
-        {/* Right: Month Navigation + Today Button + Span Selector */}
-        <div className="flex items-center gap-2">
-          <div className="inline-flex items-center gap-1">
+        {/* Right: Week/Month Navigation + Start/Today Buttons + Span Selector */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center bg-white border border-slate-300 rounded-lg p-0.5 shadow-2xs">
             <button
               type="button"
               onClick={() => handleShiftMonth(-1)}
-              className="p-1.5 rounded-lg hover:bg-slate-200/70 text-slate-700 transition-colors cursor-pointer"
-              title="เดือนก่อนหน้า"
+              className="p-1.5 rounded-md hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+              title="ย้อนกลับ 1 เดือน"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronsLeft className="w-4 h-4" />
             </button>
-            <span className="text-xs font-bold text-slate-800 min-w-[78px] text-center tabular-nums">
-              {currentMonthTitle}
-            </span>
+            <button
+              type="button"
+              onClick={() => handleShiftDays(-7)}
+              className="px-2 py-1 rounded-md hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 text-xs font-bold inline-flex items-center gap-0.5 transition-colors cursor-pointer"
+              title="เลื่อนปฏิทินไปทางซ้าย 7 วัน"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">7 วัน</span>
+            </button>
+
+            <div className="px-2.5 py-0.5 text-center border-x border-slate-200 min-w-[130px]">
+              <span className="block text-xs font-bold text-slate-800 tabular-nums leading-tight">
+                {currentMonthTitle}
+              </span>
+              <span className="block text-[10px] text-slate-500 tabular-nums leading-tight">
+                {visibleRangeLabel}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleShiftDays(7)}
+              className="px-2 py-1 rounded-md hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 text-xs font-bold inline-flex items-center gap-0.5 transition-colors cursor-pointer"
+              title="เลื่อนปฏิทินไปทางขวา 7 วัน"
+            >
+              <span className="hidden sm:inline">7 วัน</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
             <button
               type="button"
               onClick={() => handleShiftMonth(1)}
-              className="p-1.5 rounded-lg hover:bg-slate-200/70 text-slate-700 transition-colors cursor-pointer"
-              title="เดือนถัดไป"
+              className="p-1.5 rounded-md hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+              title="ถัดไป 1 เดือน"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronsRight className="w-4 h-4" />
             </button>
           </div>
 
           <button
             type="button"
-            onClick={() => handleJumpToDate('2026-06-10')}
+            onClick={() => {
+              setViewAnchorDate(getDefaultWindowStart(activeProject));
+              setHighlightedDateIso(
+                activeProject.id === 'prj-somjai'
+                  ? '2026-06-10'
+                  : activeProject.startDate || '2026-06-10'
+              );
+            }}
+            className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-800 transition-colors cursor-pointer"
+            title="กลับไปที่ช่วงวันเริ่มต้นของโครงการนี้"
+          >
+            วันเริ่มโครงการ
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const todayIso = toIsoDate(new Date());
+              // If already highlighting today, jump to 2026-06-10 or project start; otherwise jump to today
+              if (highlightedDateIso === todayIso) {
+                handleJumpToDate(activeProject.startDate || '2026-06-10');
+              } else {
+                handleJumpToDate(todayIso);
+              }
+            }}
             className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 transition-colors cursor-pointer"
+            title="เลื่อนปฏิทินไปที่วันนี้"
           >
             วันนี้
           </button>
@@ -925,9 +1262,9 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
             onChange={(e) => setCalendarSpanDays(Number(e.target.value))}
             className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 cursor-pointer"
           >
-            <option value={28}>เดือน</option>
-            <option value={14}>2 สัปดาห์</option>
-            <option value={42}>6 สัปดาห์</option>
+            <option value={28}>เดือน (28 วัน)</option>
+            <option value={14}>2 สัปดาห์ (14 วัน)</option>
+            <option value={42}>6 สัปดาห์ (42 วัน)</option>
           </select>
         </div>
       </div>
@@ -947,8 +1284,10 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                   mode: 'create_project',
                   title: '',
                   groupName: '',
-                  supervisorOrAssignee: 'นายปริวิทย์ นวลนาค',
+                  supervisorOrAssignee: 'นายปรวิทย์ นวลนาค',
                   teamCount: 12,
+                  weightPercent: 100,
+                  progressPercent: 0,
                   workflowBadge: 'ทีมออกแบบ เตรียมแบบ',
                   startDate: '2026-05-27',
                   endDate: '2026-06-30',
@@ -1027,6 +1366,8 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                             groupName: '',
                             supervisorOrAssignee: project.supervisorName || '',
                             teamCount: project.teamCount ?? 12,
+                            weightPercent: 100,
+                            progressPercent: project.progress || 0,
                             workflowBadge:
                               project.workflowBadge || 'ทีมออกแบบ เตรียมแบบ',
                             startDate: project.startDate || '',
@@ -1051,8 +1392,17 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                               title: '',
                               groupName: '',
                               supervisorOrAssignee:
-                                project.supervisorName || 'นายปริวิทย์ นวลนาค',
+                                project.supervisorName || 'นายปรวิทย์ นวลนาค',
                               teamCount: 5,
+                              weightPercent: Math.max(
+                                0,
+                                100 -
+                                  projectGroups.reduce(
+                                    (sum, g) => sum + (g.weightPercent ?? 0),
+                                    0
+                                  )
+                              ),
+                              progressPercent: 0,
                               workflowBadge: 'To do',
                               startDate: project.startDate || '2026-06-01',
                               endDate: project.endDate || '2026-06-30',
@@ -1079,6 +1429,8 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                             groupName: '',
                             supervisorOrAssignee: project.supervisorName || '',
                             teamCount: project.teamCount ?? 12,
+                            weightPercent: 100,
+                            progressPercent: project.progress || 0,
                             workflowBadge:
                               project.workflowBadge || 'ทีมออกแบบ เตรียมแบบ',
                             startDate: project.startDate || '',
@@ -1107,6 +1459,11 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                       const isPhaseCollapsed = !!collapsedPhases[phaseKey];
                       const phaseBadge = getBadgeStyle(
                         group.workflowBadge || 'To do'
+                      );
+                      const grpStats = calculateGroupWeightedStats(
+                        group,
+                        projectGroups,
+                        project.tasks || []
                       );
                       const groupTasks = filterProjectTasks(
                         (project.tasks || []).filter(
@@ -1148,6 +1505,8 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                                       project.supervisorName ||
                                       '',
                                     teamCount: group.teamCount ?? 5,
+                                    weightPercent: grpStats.groupWeightPercent,
+                                    progressPercent: grpStats.groupProgressPercent,
                                     workflowBadge:
                                       group.workflowBadge || 'To do',
                                     startDate: group.startDate || '',
@@ -1159,6 +1518,13 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                                 className="text-xs font-medium text-slate-800 truncate cursor-pointer hover:text-emerald-700"
                               >
                                 {renderHighlightedText(group.name)}
+                              </span>
+
+                              <span
+                                className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold shrink-0"
+                                title={`น้ำหนักงวดงาน ${grpStats.groupWeightPercent}% (ในงวดเสร็จ ${grpStats.groupProgressPercent}% = ${grpStats.groupEarnedInProject}% ของโครงการ)`}
+                              >
+                                {grpStats.groupWeightPercent}%
                               </span>
 
                               <div className="hidden group-hover:inline-flex items-center gap-1 ml-1 shrink-0">
@@ -1173,8 +1539,18 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                                       groupName: group.name,
                                       supervisorOrAssignee:
                                         project.supervisorName ||
-                                        'นายปริวิทย์ นวลนาค',
+                                        'นายปรวิทย์ นวลนาค',
                                       teamCount: 4,
+                                      weightPercent: Math.max(
+                                        0,
+                                        parseFloat(
+                                          (
+                                            100 -
+                                            grpStats.totalTaskWeightInGroup
+                                          ).toFixed(2)
+                                        )
+                                      ),
+                                      progressPercent: 0,
                                       workflowBadge: 'Pending',
                                       startDate:
                                         group.startDate ||
@@ -1211,6 +1587,8 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                                       project.supervisorName ||
                                       '',
                                     teamCount: group.teamCount ?? 5,
+                                    weightPercent: grpStats.groupWeightPercent,
+                                    progressPercent: grpStats.groupProgressPercent,
                                     workflowBadge:
                                       group.workflowBadge || 'To do',
                                     startDate: group.startDate || '',
@@ -1241,6 +1619,8 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                                 task.workflowBadge,
                                 task.completed
                               );
+                              const taskStat = grpStats.taskStatsById[task.id];
+                              const actualTaskPct = getTaskProgressPercent(task);
                               return (
                                 <div
                                   key={task.id}
@@ -1266,6 +1646,11 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                                             project.supervisorName ||
                                             '',
                                           teamCount: task.teamCount ?? 3,
+                                          weightPercent:
+                                            taskStat?.taskWeightInGroup ??
+                                            task.weightPercent ??
+                                            0,
+                                          progressPercent: actualTaskPct,
                                           workflowBadge: taskBadge.label,
                                           startDate: task.startDate || '',
                                           endDate: task.endDate || '',
@@ -1277,9 +1662,40 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                                     >
                                       {renderHighlightedText(task.title)}
                                     </span>
+                                    {taskStat && (
+                                      <span
+                                        className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-semibold shrink-0"
+                                        title={`น้ำหนักในงวด ${taskStat.taskWeightInGroup}% (ได้ ${taskStat.taskEarnedInProject}% ของโครงการ)`}
+                                      >
+                                        น้ำหนัก {taskStat.taskWeightInGroup}%
+                                      </span>
+                                    )}
                                   </div>
 
-                                  <div className="flex items-center gap-2 shrink-0">
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {/* Inline Actual Task Progress (%) Editor matching the Yellow Gantt Bar */}
+                                    <div
+                                      className="inline-flex items-center bg-amber-50 border border-amber-300 rounded px-1.5 py-0.5 text-[10px] font-bold text-amber-900"
+                                      title="ปรับ % ความคืบหน้างานที่ทำจริงของทาสก์นี้ (แสดงเป็นแถบสีเหลืองบนตาราง Gantt)"
+                                    >
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        value={actualTaskPct}
+                                        onChange={(e) =>
+                                          handleInlineTaskProgressChange(
+                                            project,
+                                            task.id,
+                                            parseInt(e.target.value, 10) || 0
+                                          )
+                                        }
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="w-8 bg-transparent text-right font-bold text-amber-900 focus:outline-hidden"
+                                      />
+                                      <span className="ml-0.5 text-amber-700">%</span>
+                                    </div>
+
                                     <TeamAvatarCluster
                                       count={task.teamCount ?? 0}
                                       doubleAvatar={
@@ -1299,6 +1715,11 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                                             project.supervisorName ||
                                             '',
                                           teamCount: task.teamCount ?? 3,
+                                          weightPercent:
+                                            taskStat?.taskWeightInGroup ??
+                                            task.weightPercent ??
+                                            0,
+                                          progressPercent: actualTaskPct,
                                           workflowBadge: taskBadge.label,
                                           startDate: task.startDate || '',
                                           endDate: task.endDate || '',
@@ -1347,9 +1768,32 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
           <div className="min-w-[840px]">
             {/* Calendar Header (60px height matching Left Subheader) */}
             <div className="h-[60px] border-b border-slate-200 bg-white flex flex-col justify-between">
-              {/* Top Month Label */}
-              <div className="px-3 pt-1 text-[11px] font-bold text-slate-700">
-                {currentMonthTitle}
+              {/* Top Month Label + Quick Left/Right Day Shift Buttons */}
+              <div className="px-3 pt-1 flex items-center justify-between text-[11px] font-bold text-slate-700">
+                <span>
+                  {currentMonthTitle}{' '}
+                  <span className="font-normal text-slate-400 ml-1">
+                    ({visibleRangeLabel})
+                  </span>
+                </span>
+                <div className="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleShiftDays(-7)}
+                    className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-800 text-[10px] font-semibold cursor-pointer"
+                    title="เลื่อนซ้าย 7 วัน"
+                  >
+                    ← เลื่อนซ้าย
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleShiftDays(7)}
+                    className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-800 text-[10px] font-semibold cursor-pointer"
+                    title="เลื่อนขวา 7 วัน"
+                  >
+                    เลื่อนขวา →
+                  </button>
+                </div>
               </div>
 
               {/* Day Numbers + Day of Week Row */}
@@ -1448,7 +1892,8 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                                     task.endDate,
                                     task.title,
                                     group.id,
-                                    task.id
+                                    task.id,
+                                    getTaskProgressPercent(task)
                                   )}
                                 </React.Fragment>
                               ))}
@@ -1458,6 +1903,51 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                   </React.Fragment>
                 );
               })}
+            </div>
+
+            {/* Bottom Horizontal Calendar Timeline Scrubber Bar */}
+            <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => handleShiftDays(-7)}
+                className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-700 inline-flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>เลื่อนซ้าย 7 วัน</span>
+              </button>
+
+              <div className="flex-1 flex items-center gap-3 max-w-md mx-auto">
+                <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap">
+                  เลื่อนช่วงปฏิทิน:
+                </span>
+                <input
+                  type="range"
+                  min={-90}
+                  max={90}
+                  step={1}
+                  value={Math.min(90, Math.max(-90, timelineDayOffset))}
+                  onChange={(e) => {
+                    const offset = parseInt(e.target.value, 10) || 0;
+                    const base = getDefaultWindowStart(activeProject);
+                    base.setDate(base.getDate() + offset);
+                    setViewAnchorDate(base);
+                  }}
+                  className="w-full h-2 accent-emerald-600 cursor-pointer"
+                  title="ลากแถบนี้เพื่อเลื่อนปฏิทินซ้าย-ขวาแบบรายวัน"
+                />
+                <span className="text-[11px] font-bold text-emerald-700 whitespace-nowrap min-w-[115px] text-right tabular-nums">
+                  {visibleRangeLabel}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleShiftDays(7)}
+                className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-700 inline-flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+              >
+                <span>เลื่อนขวา 7 วัน</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
         </div>
@@ -1538,7 +2028,7 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                         supervisorOrAssignee: e.target.value,
                       })
                     }
-                    placeholder="เช่น นายปริวิทย์ นวลนาค"
+                    placeholder="เช่น นายปรวิทย์ นวลนาค"
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium"
                   />
                 </div>
@@ -1563,6 +2053,154 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                 </div>
               </div>
 
+              {!modalState.mode.includes('project') && (
+                <div className="bg-indigo-50/80 border border-indigo-200 rounded-xl p-3 flex items-center justify-between gap-3">
+                  <div>
+                    <span className="block font-bold text-indigo-900 text-xs">
+                      {modalState.mode.includes('phase')
+                        ? 'น้ำหนักงวดงาน (% เทียบทั้งโครงการ)'
+                        : 'น้ำหนักกิจกรรม (% ภายในงวดงานนี้)'}
+                    </span>
+                    <span className="text-[10px] text-indigo-700">
+                      {modalState.mode.includes('phase')
+                        ? 'ผลรวมทุกงวดงานควรเท่ากับ 100% ของโครงการ'
+                        : 'ผลรวมกิจกรรมในงวดควรเท่ากับ 100% ของงวดงาน'}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-1 shrink-0">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.5"
+                      value={modalState.weightPercent}
+                      onChange={(e) =>
+                        setModalState({
+                          ...modalState,
+                          weightPercent: Math.min(
+                            100,
+                            Math.max(0, parseFloat(e.target.value) || 0)
+                          ),
+                        })
+                      }
+                      className="w-16 px-2 py-1 text-right font-bold text-indigo-700 bg-white border border-indigo-300 rounded-lg"
+                    />
+                    <span className="font-bold text-indigo-800">%</span>
+                  </div>
+                </div>
+              )}
+
+              {modalState.mode.includes('task') && (
+                <div className="bg-amber-50/90 border border-amber-300 rounded-xl p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <span className="block font-bold text-amber-950 text-xs">
+                        ความคืบหน้างานที่ทำจริง (%)
+                      </span>
+                      <span className="text-[10px] text-amber-800">
+                        แสดงเป็นแถบสีเหลืองทับแถบแผนงาน 100% (สีเขียวอ่อน) บนตาราง Gantt
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-1 shrink-0">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={modalState.progressPercent}
+                        onChange={(e) => {
+                          const nextPct = Math.min(
+                            100,
+                            Math.max(0, parseInt(e.target.value, 10) || 0)
+                          );
+                          setModalState({
+                            ...modalState,
+                            progressPercent: nextPct,
+                            workflowBadge:
+                              nextPct >= 100
+                                ? 'Completed'
+                                : modalState.workflowBadge === 'Completed' ||
+                                  modalState.workflowBadge === 'งานเสร็จเรียบร้อย'
+                                ? nextPct > 0
+                                  ? 'In Progress'
+                                  : 'Pending'
+                                : modalState.workflowBadge,
+                          });
+                        }}
+                        className="w-16 px-2 py-1 text-right font-bold text-amber-900 bg-white border border-amber-400 rounded-lg"
+                      />
+                      <span className="font-bold text-amber-900">%</span>
+                    </div>
+                  </div>
+
+                  {/* Live Two-Tone Preview Bar inside Modal */}
+                  <div className="w-full h-3 rounded-md bg-[#ccebd7] border border-[#8fd1a8] relative overflow-hidden">
+                    <div
+                      className="h-full bg-[#facc15] border-r border-[#ca8a04] transition-all duration-150"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, modalState.progressPercent))}%`,
+                      }}
+                    />
+                  </div>
+
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={modalState.progressPercent}
+                    onChange={(e) => {
+                      const nextPct = parseInt(e.target.value, 10) || 0;
+                      setModalState({
+                        ...modalState,
+                        progressPercent: nextPct,
+                        workflowBadge:
+                          nextPct >= 100
+                            ? 'Completed'
+                            : modalState.workflowBadge === 'Completed' ||
+                              modalState.workflowBadge === 'งานเสร็จเรียบร้อย'
+                            ? nextPct > 0
+                              ? 'In Progress'
+                              : 'Pending'
+                            : modalState.workflowBadge,
+                      });
+                    }}
+                    className="w-full h-1.5 accent-amber-500 cursor-pointer"
+                  />
+
+                  <div className="flex items-center justify-between gap-1 pt-0.5">
+                    {[0, 25, 50, 75, 100].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() =>
+                          setModalState({
+                            ...modalState,
+                            progressPercent: preset,
+                            workflowBadge:
+                              preset >= 100
+                                ? 'Completed'
+                                : modalState.workflowBadge === 'Completed' ||
+                                  modalState.workflowBadge === 'งานเสร็จเรียบร้อย'
+                                ? preset > 0
+                                  ? 'In Progress'
+                                  : 'Pending'
+                                : modalState.workflowBadge,
+                          })
+                        }
+                        className={`flex-1 py-1 rounded text-[10px] font-bold transition-colors cursor-pointer ${
+                          modalState.progressPercent === preset
+                            ? 'bg-amber-500 text-slate-950 shadow-2xs'
+                            : 'bg-white border border-amber-300 text-amber-900 hover:bg-amber-100'
+                        }`}
+                      >
+                        {preset}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
                   ป้ายสถานะ (Workflow Status)
@@ -1576,6 +2214,11 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                         setModalState({
                           ...modalState,
                           workflowBadge: opt.label,
+                          progressPercent: opt.marksCompleted
+                            ? 100
+                            : modalState.progressPercent >= 100
+                            ? 50
+                            : modalState.progressPercent,
                         })
                       }
                       className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center justify-between cursor-pointer border ${
@@ -1659,7 +2302,7 @@ export const GeneralWorkflowView: React.FC<GeneralWorkflowViewProps> = ({
                         onUpdateProject({
                           ...proj,
                           tasks: nextTasks,
-                          progress: recalculateProjectProgress(nextTasks),
+                          progress: recalculateProjectProgress(nextTasks, proj),
                         });
                       }
                       setModalState(null);

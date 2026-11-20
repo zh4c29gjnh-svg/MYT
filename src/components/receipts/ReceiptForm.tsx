@@ -23,13 +23,14 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 
-interface ReceiptFormProps {
+  interface ReceiptFormProps {
   receiptType: 'tax_0' | 'tax_3' | 'tax_3_retention_5';
   subcontractors: Subcontractor[];
   projects: Project[];
   onSaveReceipt: (receipt: Receipt) => void;
   onSaveSubcontractor?: (subcontractor: Subcontractor) => void;
   initialReceipt?: Receipt | null;
+  onClearEditReceipt?: () => void;
   selectedSubcontractor?: Subcontractor | null;
 }
 
@@ -40,6 +41,7 @@ export const ReceiptForm: React.FC<ReceiptFormProps> = ({
   onSaveReceipt,
   onSaveSubcontractor,
   initialReceipt,
+  onClearEditReceipt,
   selectedSubcontractor,
 }) => {
   const getDefaultTaxRate = () => (receiptType === 'tax_0' ? 0 : 3);
@@ -106,37 +108,54 @@ export const ReceiptForm: React.FC<ReceiptFormProps> = ({
   const currentSub = subcontractors.find((s) => s.id === selectedSubId) || 
     (subIdCard ? subcontractors.find((s) => s.idCardNumber.replace(/\s+/g, '') === subIdCard.replace(/\s+/g, '')) : null);
 
-  // Whenever subcontractor selector changes, fill details
-  useEffect(() => {
-    if (selectedSubId) {
-      const found = subcontractors.find((s) => s.id === selectedSubId);
-      if (found) {
-        setSubName(found.name);
-        setSubAddress(found.address);
-        setSubIdCard(found.idCardNumber);
-        setSigneeName(found.name);
-        if (found.skillType && !initialReceipt) {
-          setPaymentFor(`${found.skillType}`);
-        }
-        if (found.name.includes('บานชื่น') && !initialReceipt) {
-          setAmount(4000);
-          setDate('2026-07-31');
-        } else if (found.name.includes('บรรเลง') && !initialReceipt) {
-          setAmount(45000);
-          setDate('2026-06-25');
-        }
+  // Whenever subcontractor selector changes manually (when not loading an initialReceipt), fill details
+  const handleSelectSubcontractorDropdown = (subId: string) => {
+    setSelectedSubId(subId);
+    const found = subcontractors.find((s) => s.id === subId);
+    if (found) {
+      setSubName(found.name);
+      setSubAddress(found.address);
+      setSubIdCard(found.idCardNumber);
+      setSigneeName(found.name);
+      if (found.skillType && !initialReceipt) {
+        setPaymentFor(`${found.skillType}`);
+      }
+      if (found.name.includes('บานชื่น') && !initialReceipt) {
+        setAmount(4000);
+        setDate('2026-07-31');
+      } else if (found.name.includes('บรรเลง') && !initialReceipt) {
+        setAmount(45000);
+        setDate('2026-06-25');
       }
     }
-  }, [selectedSubId, subcontractors]);
+  };
 
-  // Sync when initialReceipt changes
+  // Sync when selectedSubcontractor from 1.1 changes (and not editing an existing receipt)
+  useEffect(() => {
+    if (selectedSubcontractor && !initialReceipt) {
+      handleSelectSubcontractorDropdown(selectedSubcontractor.id);
+    }
+  }, [selectedSubcontractor]);
+
+  // Sync when initialReceipt changes (loaded from 1.6 Archive for editing)
   useEffect(() => {
     if (initialReceipt) {
       setDate(initialReceipt.date);
+      setSelectedSubId(initialReceipt.subcontractorId || '');
       setSubName(initialReceipt.subcontractorName);
       setSubAddress(initialReceipt.subcontractorAddress);
       setSubIdCard(initialReceipt.subcontractorIdCard);
+      setPayerName(
+        initialReceipt.payerCompanyName || 'บริษัท ไม้ยืนต้น คอนสตรัคชั่น จำกัด'
+      );
+      setPayerAddress(
+        initialReceipt.payerCompanyAddress ||
+          '27/2 ซอยพหลโยธิน 24 แยก 2-1 ถนนพหลโยธิน แขวงจอมพล เขตจตุจักร กทม.10900'
+      );
       setPaymentFor(initialReceipt.paymentFor);
+      if (initialReceipt.projectId) {
+        setSelectedProjectId(initialReceipt.projectId);
+      }
       setAmount(initialReceipt.amount);
       setDepositAdvance(initialReceipt.depositAdvance);
       setTaxRate(initialReceipt.taxRate);
@@ -162,7 +181,7 @@ export const ReceiptForm: React.FC<ReceiptFormProps> = ({
 
   const thaiText = formatBahtText(netPayable);
 
-  // Construct current receipt object
+  // Construct current receipt object (preserves id & receiptNumber when editing)
   const currentReceipt: Receipt = {
     id: initialReceipt?.id || `rec-${Date.now()}`,
     receiptNumber: initialReceipt?.receiptNumber || `REC-2569-${Math.floor(100 + Math.random() * 900)}`,
@@ -196,7 +215,11 @@ export const ReceiptForm: React.FC<ReceiptFormProps> = ({
 
   const handleSave = () => {
     onSaveReceipt(currentReceipt);
-    setSaveSuccessMessage('บันทึกใบเสร็จเข้าคลังเอกสาร MYT เรียบร้อยแล้ว!');
+    setSaveSuccessMessage(
+      initialReceipt
+        ? `บันทึกแก้ไขทับใบเสร็จเลขที่ ${currentReceipt.receiptNumber} เรียบร้อยแล้ว!`
+        : 'บันทึกใบเสร็จเข้าคลังเอกสาร MYT เรียบร้อยแล้ว!'
+    );
     setTimeout(() => setSaveSuccessMessage(null), 4000);
   };
 
@@ -213,6 +236,32 @@ export const ReceiptForm: React.FC<ReceiptFormProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Editing Mode Indicator Banner */}
+      {initialReceipt && (
+        <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center space-x-2.5 text-amber-950 text-xs sm:text-sm">
+            <FileText className="w-5 h-5 text-amber-600 shrink-0" />
+            <div>
+              <span className="font-bold">
+                โหมดแก้ไขใบเสร็จเดิม: เลขที่ {initialReceipt.receiptNumber}
+              </span>{' '}
+              <span>
+                ({initialReceipt.subcontractorName}) — เมื่อกด &ldquo;บันทึกเข้าระบบ&rdquo; ระบบจะบันทึกทับใบเดิมโดยใช้เลขที่เอกสารเดิม
+              </span>
+            </div>
+          </div>
+          {onClearEditReceipt && (
+            <button
+              type="button"
+              onClick={onClearEditReceipt}
+              className="px-3 py-1.5 bg-white hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap self-end sm:self-center cursor-pointer"
+            >
+              + ออกใบเสร็จใบใหม่แทน
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Title & Action Toolbar */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -230,6 +279,7 @@ export const ReceiptForm: React.FC<ReceiptFormProps> = ({
           <button
             type="button"
             onClick={() => {
+              onClearEditReceipt?.();
               setAmount(45000);
               setDepositAdvance(0);
               setOtherDeductions(0);
@@ -281,7 +331,7 @@ export const ReceiptForm: React.FC<ReceiptFormProps> = ({
             </label>
             <select
               value={selectedSubId}
-              onChange={(e) => setSelectedSubId(e.target.value)}
+              onChange={(e) => handleSelectSubcontractorDropdown(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
             >
               <option value="">-- กรอกข้อมูลเอง / เลือกจากรายการ --</option>

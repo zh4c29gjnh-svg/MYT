@@ -12,6 +12,7 @@ import {
   SevenElevenBranch,
   SevenElevenInspectionDoc,
   SevenElevenInspectionItem,
+  LandSurveyRecord,
 } from '../types/types.ts';
 
 const STORAGE_KEYS = {
@@ -22,6 +23,7 @@ const STORAGE_KEYS = {
   DAILY_REPORTS: 'myt_daily_reports_v1',
   SEVEN_ELEVEN_BRANCHES: 'myt_711_branches_v1',
   SEVEN_ELEVEN_INSPECTIONS: 'myt_711_inspections_v1',
+  LAND_SURVEYS: 'myt_land_surveys_v1',
 };
 
 import { generateSampleIdCardDataUrl } from './sampleIdCard.ts';
@@ -92,7 +94,7 @@ const INITIAL_PROJECTS: Project[] = [
     endDate: '2026-06-30',
     budget: 1850000,
     status: 'in_progress',
-    supervisorName: 'นายปริวิทย์ นวลนาค',
+    supervisorName: 'นายปรวิทย์ นวลนาค',
     clientName: 'บมจ. ซีพี ออลล์ (CP ALL)',
     isFollowed: true,
     progress: 75.5,
@@ -102,6 +104,7 @@ const INITIAL_PROJECTS: Project[] = [
       {
         id: 'grp-1',
         name: 'งานงวดที่ 1',
+        weightPercent: 30,
         startDate: '2026-06-01',
         endDate: '2026-06-12',
         teamCount: 5,
@@ -110,6 +113,7 @@ const INITIAL_PROJECTS: Project[] = [
       {
         id: 'grp-2',
         name: 'งานงวดที่ 2',
+        weightPercent: 40,
         startDate: '2026-06-08',
         endDate: '2026-06-22',
         teamCount: 6,
@@ -118,6 +122,7 @@ const INITIAL_PROJECTS: Project[] = [
       {
         id: 'grp-3',
         name: 'งานงวดที่ 3',
+        weightPercent: 30,
         startDate: '2026-06-15',
         endDate: '2026-06-30',
         teamCount: 4,
@@ -126,6 +131,7 @@ const INITIAL_PROJECTS: Project[] = [
       {
         id: 'grp-4',
         name: 'งานเครื่องจักร',
+        weightPercent: 0,
         startDate: '2026-06-02',
         endDate: '2026-06-18',
         teamCount: 3,
@@ -134,6 +140,7 @@ const INITIAL_PROJECTS: Project[] = [
       {
         id: 'grp-5',
         name: 'คอนกรีต',
+        weightPercent: 0,
         startDate: '2026-06-05',
         endDate: '2026-06-25',
         teamCount: 4,
@@ -157,7 +164,7 @@ const INITIAL_PROJECTS: Project[] = [
         commentsCount: 2,
         teamCount: 4,
         workflowBadge: 'งานเสร็จเรียบร้อย',
-        weightPercent: 15,
+        weightPercent: 30,
       },
       {
         id: 'tsk-2',
@@ -175,7 +182,7 @@ const INITIAL_PROJECTS: Project[] = [
         commentsCount: 2,
         teamCount: 7,
         workflowBadge: 'Completed',
-        weightPercent: 10,
+        weightPercent: 40,
       },
       {
         id: 'tsk-3',
@@ -192,7 +199,7 @@ const INITIAL_PROJECTS: Project[] = [
         ratingStars: 4,
         teamCount: 2,
         workflowBadge: 'Completed',
-        weightPercent: 10,
+        weightPercent: 30,
       },
       {
         id: 'tsk-4',
@@ -209,7 +216,7 @@ const INITIAL_PROJECTS: Project[] = [
         ratingStars: 5,
         teamCount: 5,
         workflowBadge: 'Completed',
-        weightPercent: 15,
+        weightPercent: 30,
       },
       {
         id: 'tsk-5',
@@ -226,7 +233,7 @@ const INITIAL_PROJECTS: Project[] = [
         ratingStars: 4,
         teamCount: 3,
         workflowBadge: 'Completed',
-        weightPercent: 10,
+        weightPercent: 25,
       },
       {
         id: 'tsk-6',
@@ -243,7 +250,7 @@ const INITIAL_PROJECTS: Project[] = [
         ratingStars: 4,
         teamCount: 3,
         workflowBadge: 'Completed',
-        weightPercent: 10,
+        weightPercent: 25,
       },
       {
         id: 'tsk-7',
@@ -260,7 +267,7 @@ const INITIAL_PROJECTS: Project[] = [
         ratingStars: 4,
         teamCount: 4,
         workflowBadge: 'Completed',
-        weightPercent: 10,
+        weightPercent: 20,
       },
       {
         id: 'tsk-8',
@@ -277,7 +284,7 @@ const INITIAL_PROJECTS: Project[] = [
         ratingStars: 4,
         teamCount: 2,
         workflowBadge: 'Completed',
-        weightPercent: 8,
+        weightPercent: 35,
       },
       {
         id: 'tsk-9',
@@ -294,7 +301,7 @@ const INITIAL_PROJECTS: Project[] = [
         ratingStars: 5,
         teamCount: 3,
         workflowBadge: 'Completed',
-        weightPercent: 5,
+        weightPercent: 25,
       },
       {
         id: 'tsk-10',
@@ -309,7 +316,7 @@ const INITIAL_PROJECTS: Project[] = [
         endDate: '2026-06-30',
         teamCount: 3,
         workflowBadge: 'Pending',
-        weightPercent: 7,
+        weightPercent: 40,
       },
     ],
     createdAt: '2026-10-01T08:00:00Z',
@@ -323,7 +330,7 @@ const INITIAL_PROJECTS: Project[] = [
     endDate: '2026-06-30',
     budget: 4500000,
     status: 'in_progress',
-    supervisorName: 'นายปริวิทย์ นวลนาค',
+    supervisorName: 'นายปรวิทย์ นวลนาค',
     clientName: 'SomJai Development',
     isFollowed: true,
     progress: 60,
@@ -334,12 +341,16 @@ const INITIAL_PROJECTS: Project[] = [
       {
         id: 'sj-grp-2',
         name: 'SomJai Phase 2',
+        weightPercent: 60,
+        startDate: '2026-06-25',
+        endDate: '2026-07-15',
         teamCount: 5,
         workflowBadge: 'ทีมขายติดต่อลูกค้า',
       },
       {
         id: 'sj-grp-1',
         name: 'SomJai Phase 1',
+        weightPercent: 40,
         startDate: '2026-05-27',
         endDate: '2026-06-30',
         teamCount: 6,
@@ -356,10 +367,12 @@ const INITIAL_PROJECTS: Project[] = [
         status: 'completed',
         completed: true,
         progressPercent: 100,
-        assignedTo: 'นายปริวิทย์ นวลนาค',
+        startDate: '2026-06-25',
+        endDate: '2026-07-05',
+        assignedTo: 'นายปรวิทย์ นวลนาค',
         teamCount: 4,
         workflowBadge: 'งานเสร็จเรียบร้อย',
-        weightPercent: 20,
+        weightPercent: 30,
       },
       {
         id: 'sj-tsk-2',
@@ -370,10 +383,12 @@ const INITIAL_PROJECTS: Project[] = [
         status: 'completed',
         completed: true,
         progressPercent: 100,
-        assignedTo: 'นายปริวิทย์ นวลนาค',
+        startDate: '2026-06-28',
+        endDate: '2026-07-10',
+        assignedTo: 'นายปรวิทย์ นวลนาค',
         teamCount: 7,
         workflowBadge: 'Completed',
-        weightPercent: 20,
+        weightPercent: 40,
       },
       {
         id: 'sj-tsk-3',
@@ -384,10 +399,12 @@ const INITIAL_PROJECTS: Project[] = [
         status: 'completed',
         completed: true,
         progressPercent: 100,
-        assignedTo: 'นายปริวิทย์ นวลนาค',
+        startDate: '2026-07-01',
+        endDate: '2026-07-15',
+        assignedTo: 'นายปรวิทย์ นวลนาค',
         teamCount: 2,
         workflowBadge: 'Completed',
-        weightPercent: 20,
+        weightPercent: 30,
       },
       {
         id: 'sj-tsk-4',
@@ -400,11 +417,11 @@ const INITIAL_PROJECTS: Project[] = [
         progressPercent: 30,
         startDate: '2026-06-05',
         endDate: '2026-06-30',
-        assignedTo: 'นายปริวิทย์ นวลนาค',
+        assignedTo: 'นายปรวิทย์ นวลนาค',
         teamCount: 0,
         workflowBadge: 'Pending',
         hasSubArrow: true,
-        weightPercent: 20,
+        weightPercent: 50,
       },
       {
         id: 'sj-tsk-5',
@@ -417,11 +434,11 @@ const INITIAL_PROJECTS: Project[] = [
         progressPercent: 45,
         startDate: '2026-05-27',
         endDate: '2026-06-30',
-        assignedTo: 'นายปริวิทย์ นวลนาค',
+        assignedTo: 'นายปรวิทย์ นวลนาค',
         teamCount: 3,
         workflowBadge: 'Pending',
         hasSubArrow: true,
-        weightPercent: 20,
+        weightPercent: 50,
       },
     ],
     createdAt: '2026-10-05T08:00:00Z',
@@ -435,7 +452,7 @@ const INITIAL_PROJECTS: Project[] = [
     endDate: '2026-11-20',
     budget: 2100000,
     status: 'in_progress',
-    supervisorName: 'นายปริวิทย์ นวลนาค',
+    supervisorName: 'นายปรวิทย์ นวลนาค',
     clientName: 'บมจ. ซีพี ออลล์',
     isFollowed: true,
     progress: 96.9,
@@ -456,7 +473,7 @@ const INITIAL_PROJECTS: Project[] = [
     endDate: '2026-10-25',
     budget: 1950000,
     status: 'completed',
-    supervisorName: 'นายปริวิทย์ นวลนาค',
+    supervisorName: 'นายปรวิทย์ นวลนาค',
     isFollowed: false,
     progress: 100,
     groups: [],
@@ -472,7 +489,7 @@ const INITIAL_PROJECTS: Project[] = [
     endDate: '2026-10-30',
     budget: 1800000,
     status: 'completed',
-    supervisorName: 'นายปริวิทย์ นวลนาค',
+    supervisorName: 'นายปรวิทย์ นวลนาค',
     isFollowed: false,
     progress: 100,
     groups: [],
@@ -488,7 +505,7 @@ const INITIAL_PROJECTS: Project[] = [
     endDate: '2026-11-30',
     budget: 1650000,
     status: 'in_progress',
-    supervisorName: 'นายปริวิทย์ นวลนาค',
+    supervisorName: 'นายปรวิทย์ นวลนาค',
     isFollowed: false,
     progress: 96.0,
     groups: [],
@@ -630,7 +647,7 @@ const INITIAL_HANDOVERS: HandoverDocument[] = [
     ],
     totalAmount: 51546.39,
     totalAmountThaiText: 'ห้าหมื่นหนึ่งพันห้าร้อยสี่สิบหกบาทสามสิบเก้าสตางค์',
-    supervisorName: 'นายปริวิทย์ นวลนาค',
+    supervisorName: 'นายปรวิทย์ นวลนาค',
     supervisorCompany: 'บริษัท ไม้ยืนต้นคอนสตรัคชั่น จำกัด',
     supervisorConfirmedDate: '2026-11-10',
     engineerName: 'นายช่างวิศวกรโยธา',
@@ -669,7 +686,7 @@ const INITIAL_DAILY_REPORTS: DailyReport[] = [
     problemsAndIssues: 'การจราจรหน้าหน่วยงานติดขัดเล็กน้อยช่วงรถโม่เข้า แต่ประสานงานเจ้าหน้าที่เรียบร้อย',
     solutions: 'จัดเจ้าหน้าที่โบกธงจราจรหน้าทางเข้าโครงการ',
     safetyNotes: 'สวมใส่อุปกรณ์ PPE ครบถ้วน 100% ไม่มีอุบัติเหตุ',
-    reporterName: 'นายปริวิทย์ นวลนาค',
+    reporterName: 'นายปรวิทย์ นวลนาค',
     createdAt: '2026-11-10T17:00:00Z',
   },
 ];
@@ -744,6 +761,15 @@ export function saveReceipts(data: Receipt[]): void {
   localStorage.setItem(STORAGE_KEYS.RECEIPTS, JSON.stringify(data));
 }
 
+function normalizeLegacySupervisorSpelling(key: string, raw: string): string {
+  if (raw.includes('ปริวิทย์')) {
+    const fixed = raw.replace(/ปริวิทย์/g, 'ปรวิทย์');
+    localStorage.setItem(key, fixed);
+    return fixed;
+  }
+  return raw;
+}
+
 export function getHandovers(): HandoverDocument[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.HANDOVERS);
@@ -751,7 +777,7 @@ export function getHandovers(): HandoverDocument[] {
       localStorage.setItem(STORAGE_KEYS.HANDOVERS, JSON.stringify(INITIAL_HANDOVERS));
       return INITIAL_HANDOVERS;
     }
-    return JSON.parse(raw);
+    return JSON.parse(normalizeLegacySupervisorSpelling(STORAGE_KEYS.HANDOVERS, raw));
   } catch {
     return INITIAL_HANDOVERS;
   }
@@ -768,10 +794,89 @@ export function getProjects(): Project[] {
       localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(INITIAL_PROJECTS));
       return INITIAL_PROJECTS;
     }
-    const parsed: Project[] = JSON.parse(raw);
+    let parsed: Project[] = JSON.parse(
+      normalizeLegacySupervisorSpelling(STORAGE_KEYS.PROJECTS, raw)
+    );
+    let updated = false;
+
     const somjaiSample = INITIAL_PROJECTS.find((p) => p.id === 'prj-somjai');
     if (somjaiSample && !parsed.some((p) => p.id === 'prj-somjai')) {
       parsed.unshift(somjaiSample);
+      updated = true;
+    }
+
+    // Backfill default group weights and missing startDate/endDate on seed projects
+    parsed = parsed.map((proj) => {
+      const seed = INITIAL_PROJECTS.find((ip) => ip.id === proj.id);
+      if (!seed) return proj;
+
+      let projChanged = false;
+      let nextStartDate = proj.startDate;
+      let nextEndDate = proj.endDate;
+
+      if (!nextStartDate || nextStartDate.startsWith('2023-')) {
+        nextStartDate = seed.startDate;
+        nextEndDate = seed.endDate;
+        projChanged = true;
+      }
+
+      const allGroupsMissingWeights =
+        proj.groups &&
+        proj.groups.length > 0 &&
+        proj.groups.every((g) => g.weightPercent === undefined);
+
+      const nextGroups = (proj.groups || seed.groups || []).map((g) => {
+        const sg = seed.groups.find((x) => x.id === g.id || x.name === g.name);
+        if (!sg) return g;
+        let gUpdated = { ...g };
+        if (allGroupsMissingWeights && gUpdated.weightPercent === undefined) {
+          gUpdated.weightPercent = sg.weightPercent;
+          projChanged = true;
+        }
+        if (!gUpdated.startDate && sg.startDate) {
+          gUpdated.startDate = sg.startDate;
+          projChanged = true;
+        }
+        if (!gUpdated.endDate && sg.endDate) {
+          gUpdated.endDate = sg.endDate;
+          projChanged = true;
+        }
+        return gUpdated;
+      });
+
+      const nextTasks = (proj.tasks || []).map((t) => {
+        const st = seed.tasks.find((x) => x.id === t.id || x.title === t.title);
+        if (!st) return t;
+        let tUpdated = { ...t };
+        if (allGroupsMissingWeights && tUpdated.weightPercent === undefined) {
+          tUpdated.weightPercent = st.weightPercent;
+          projChanged = true;
+        }
+        if (!tUpdated.startDate && st.startDate) {
+          tUpdated.startDate = st.startDate;
+          projChanged = true;
+        }
+        if (!tUpdated.endDate && st.endDate) {
+          tUpdated.endDate = st.endDate;
+          projChanged = true;
+        }
+        return tUpdated;
+      });
+
+      if (projChanged) {
+        updated = true;
+        return {
+          ...proj,
+          startDate: nextStartDate,
+          endDate: nextEndDate,
+          groups: nextGroups,
+          tasks: nextTasks,
+        };
+      }
+      return proj;
+    });
+
+    if (updated) {
       localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(parsed));
     }
     return parsed;
@@ -791,7 +896,7 @@ export function getDailyReports(): DailyReport[] {
       localStorage.setItem(STORAGE_KEYS.DAILY_REPORTS, JSON.stringify(INITIAL_DAILY_REPORTS));
       return INITIAL_DAILY_REPORTS;
     }
-    return JSON.parse(raw);
+    return JSON.parse(normalizeLegacySupervisorSpelling(STORAGE_KEYS.DAILY_REPORTS, raw));
   } catch {
     return INITIAL_DAILY_REPORTS;
   }
@@ -972,4 +1077,122 @@ export function saveSevenElevenInspections(data: SevenElevenInspectionDoc[]): vo
     JSON.stringify(data)
   );
 }
+
+const INITIAL_LAND_SURVEYS: LandSurveyRecord[] = [
+  {
+    id: 'srv-1',
+    docNumber: 'SRV-2569-001',
+    title: 'สำรวจเช็คระยะโฉนด 7-11 ลาดกระบัง (สนามชัยเขต)',
+    projectId: 'prj-1',
+    projectName: '7-11 ลาดกระบัง (สนามชัยเขต)',
+    deedNumber: '58412',
+    parcelNumber: 'เลขที่ดิน 114 หน้าสำรวจ 4820',
+    location: 'ถ.ลาดกระบัง เขตลาดกระบัง กรุงเทพมหานคร',
+    surveyDate: '2026-11-19',
+    surveyorName: 'นายปรวิทย์ นวลนาค',
+    deedAreaRai: 0,
+    deedAreaNgan: 2,
+    deedAreaSqWah: 25,
+    isClosedPolygon: true,
+    pins: [
+      {
+        id: 'pin-1',
+        pinNumber: 1,
+        label: 'หมุดที่ 1 (มุมทิศตะวันตกเฉียงเหนือ - ติดถนนลาดกระบัง)',
+        lat: 13.72795,
+        lng: 100.74815,
+        utmZone: '47P',
+        utmEasting: 689051.4,
+        utmNorthing: 1518224.2,
+        accuracyMeters: 2.4,
+        checkedInBy: 'นายปรวิทย์ นวลนาค',
+        checkedInAt: '2026-11-19T08:45:00Z',
+        deedDistanceToNextMeters: 30.0,
+        notes: 'พบหลักหมุดคอนกรีตกรมที่ดินชัดเจน',
+      },
+      {
+        id: 'pin-2',
+        pinNumber: 2,
+        label: 'หมุดที่ 2 (มุมทิศตะวันออกเฉียงเหนือ - ติดถนนลาดกระบัง)',
+        lat: 13.72795,
+        lng: 100.748428,
+        utmZone: '47P',
+        utmEasting: 689081.5,
+        utmNorthing: 1518224.4,
+        accuracyMeters: 2.1,
+        checkedInBy: 'นายปรวิทย์ นวลนาค',
+        checkedInAt: '2026-11-19T08:52:00Z',
+        deedDistanceToNextMeters: 30.0,
+        notes: 'หลักหมุดอยู่ชิดเสาไฟฟ้าด้านหน้า',
+      },
+      {
+        id: 'pin-3',
+        pinNumber: 3,
+        label: 'หมุดที่ 3 (มุมทิศตะวันออกเฉียงใต้ - ด้านหลังแปลง)',
+        lat: 13.727679,
+        lng: 100.748428,
+        utmZone: '47P',
+        utmEasting: 689081.7,
+        utmNorthing: 1518194.4,
+        accuracyMeters: 2.8,
+        checkedInBy: 'นายปรวิทย์ นวลนาค',
+        checkedInAt: '2026-11-19T09:01:00Z',
+        deedDistanceToNextMeters: 30.0,
+        notes: 'แนวรั้วเดิมข้างเคียงตรงตามระยะโฉนด',
+      },
+      {
+        id: 'pin-4',
+        pinNumber: 4,
+        label: 'หมุดที่ 4 (มุมทิศตะวันตกเฉียงใต้ - ด้านหลังแปลง)',
+        lat: 13.727679,
+        lng: 100.74815,
+        utmZone: '47P',
+        utmEasting: 689051.6,
+        utmNorthing: 1518194.2,
+        accuracyMeters: 2.5,
+        checkedInBy: 'นายปรวิทย์ นวลนาค',
+        checkedInAt: '2026-11-19T09:10:00Z',
+        deedDistanceToNextMeters: 30.0,
+        notes: 'หลักหมุดเสมอผิวดินเดิม',
+      },
+    ],
+    attendanceCheckins: [
+      {
+        id: 'att-1',
+        personName: 'นายปรวิทย์ นวลนาค',
+        role: 'วิศวกรผู้ควบคุมงาน',
+        lat: 13.727815,
+        lng: 100.748289,
+        accuracyMeters: 2.2,
+        checkedInAt: '2026-11-19T08:40:00Z',
+        isInsideBoundary: true,
+        distanceToBoundaryMeters: 0,
+        notes: 'เช็คอินเริ่มงานสำรวจวางผังบริเวณกลางแปลงที่ดิน',
+      },
+    ],
+    notes: 'ตรวจสอบระยะทั้ง 4 ด้านเทียบกับโฉนดเลขที่ 58412 อยู่ในเกณฑ์ปกติ',
+    createdAt: '2026-11-19T09:15:00Z',
+  },
+];
+
+export function getLandSurveys(): LandSurveyRecord[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.LAND_SURVEYS);
+    if (!raw) {
+      localStorage.setItem(
+        STORAGE_KEYS.LAND_SURVEYS,
+        JSON.stringify(INITIAL_LAND_SURVEYS)
+      );
+      return INITIAL_LAND_SURVEYS;
+    }
+    return JSON.parse(normalizeLegacySupervisorSpelling(STORAGE_KEYS.LAND_SURVEYS, raw));
+  } catch {
+    return INITIAL_LAND_SURVEYS;
+  }
+}
+
+export function saveLandSurveys(data: LandSurveyRecord[]): void {
+  localStorage.setItem(STORAGE_KEYS.LAND_SURVEYS, JSON.stringify(data));
+}
+
 

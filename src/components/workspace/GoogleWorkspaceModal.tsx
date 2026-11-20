@@ -147,14 +147,15 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
                   </span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => window.open(window.location.href, '_blank')}
+              <a
+                href={typeof window !== 'undefined' ? window.location.href : '#'}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-xs transition-colors shrink-0 flex items-center justify-center space-x-1 shadow-xs"
               >
                 <span>เปิดแอปในแท็บใหม่</span>
                 <ExternalLink className="w-3.5 h-3.5 ml-1" />
-              </button>
+              </a>
             </div>
           )}
 
